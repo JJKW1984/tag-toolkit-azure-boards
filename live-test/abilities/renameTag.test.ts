@@ -66,4 +66,52 @@ describe("renameTag ability", () => {
     expect(result.status).toBe("fail");
     expect(result.detail).not.toContain("abc123");
   });
+
+  it("fails when a work item did not receive the new name", async () => {
+    const client = new FakeAdoClient();
+    jest.spyOn(client, "getWorkItemTags").mockResolvedValue([
+      { id: 1, tags: ["unrelated"] },
+      { id: 2, tags: ["unrelated"] },
+    ]);
+
+    const result = await renameTagAbility.run(contextFor(client));
+
+    expect(result.status).toBe("fail");
+    expect(result.detail).toMatch(/did not receive/);
+    expect(result.detail).toMatch(/[12]/); // names a work item id
+  });
+
+  it("fails when the old name is still present in the tags list after rename", async () => {
+    const client = new FakeAdoClient();
+    const oldName = "livetest-r1-rename-old";
+
+    // Mock renameTag to succeed without actually changing the fake's state
+    jest.spyOn(client, "renameTag").mockResolvedValue({ id: "1", name: "livetest-r1-rename-new", url: "" });
+
+    // Mock getWorkItemTags to show items now have the new name (pass per-item check)
+    jest.spyOn(client, "getWorkItemTags").mockResolvedValue([
+      { id: 1, tags: ["livetest-r1-rename-new"] },
+      { id: 2, tags: ["livetest-r1-rename-new"] },
+    ]);
+
+    // Mock listTags: first call is real, second call still has old name
+    const realListTags = client.listTags.bind(client);
+    let listTagsCallCount = 0;
+    jest.spyOn(client, "listTags").mockImplementation(async () => {
+      listTagsCallCount++;
+      if (listTagsCallCount === 1) {
+        // First call: real implementation
+        return realListTags();
+      } else {
+        // Second call: mock the old tag still being there
+        const tags = await realListTags();
+        return tags.concat([{ id: "stale", name: oldName, url: "" }]);
+      }
+    });
+
+    const result = await renameTagAbility.run(contextFor(client));
+
+    expect(result.status).toBe("fail");
+    expect(result.detail).toMatch(/still present in the tags list/);
+  });
 });
