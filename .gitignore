@@ -6,3 +6,4 @@ dist/
 coverage/
 test-results/
 azure-devops-extension.test.json
+.superpowers/
