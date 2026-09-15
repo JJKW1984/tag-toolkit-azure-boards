@@ -25,6 +25,27 @@ Flags:
   --cleanup          Delete everything recorded in one manifest
   --cleanup-all      Delete everything in every manifest still marked in-progress`;
 
+/**
+ * `node:util` parseArgs embeds the offending argv token in its message, e.g.
+ * `Unexpected argument 'MY-SECRET-PAT'`. That token is frequently the PAT
+ * itself — a dropped `--pat` flag name or one stray token is enough — and the
+ * message lands on stdout and in CI logs. `sanitizeError` cannot save it: a
+ * bare token has no `token=` prefix and no URL to match on. So report the
+ * problem *class* and never the value.
+ */
+function describeParseFailure(e: unknown): string {
+  switch ((e as { code?: string } | null)?.code) {
+    case "ERR_PARSE_ARGS_UNKNOWN_OPTION":
+      return "Unrecognized option";
+    case "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL":
+      return "Unexpected positional argument — every value must follow its flag";
+    case "ERR_PARSE_ARGS_INVALID_OPTION_VALUE":
+      return "An option was given without its required value";
+    default:
+      return "Invalid arguments";
+  }
+}
+
 export function parseCliArgs(argv: string[]): CliOptions {
   let parsed;
   try {
@@ -43,7 +64,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
       allowPositionals: false,
     });
   } catch (e) {
-    throw new CliError(`${(e as Error).message}\n\n${USAGE}`);
+    throw new CliError(`${describeParseFailure(e)} — see usage below.\n\n${USAGE}`);
   }
 
   const v = parsed.values;
@@ -209,6 +230,17 @@ export async function main(argv: string[], io: MainIo = defaultIo): Promise<numb
 
   if (shouldClean) {
     await cleanupRun(client, store, io.log);
+    // cleanupRun marks the manifest cleaned only when every delete resolved.
+    // Returning 0 here because the assertions passed would report a green run
+    // while real test data is still alive in the project — and CI would never
+    // learn about it.
+    if (store.manifest.status !== "cleaned") {
+      io.log(
+        `\nTest data may still be live in ${project}: cleanup did not complete. ` +
+          `Retry with:\n  pnpm live-test --cleanup ${store.path} --pat <pat>`
+      );
+      return 1;
+    }
   } else {
     io.log(`\nLeft in place. Clean up later with:\n  pnpm live-test --cleanup ${store.path} --pat <pat>`);
   }

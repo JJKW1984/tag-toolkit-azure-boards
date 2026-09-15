@@ -66,6 +66,23 @@ export class AdoClient implements IAdoClient {
     }
 
     if (res.status === 204) return undefined;
+
+    // A PAT that is wrong, expired, or lacking scope does not reliably get a
+    // 401 from Azure DevOps: it characteristically gets HTTP 203 plus an HTML
+    // sign-in page, and `res.ok` is true for 203. Handing that to res.json()
+    // throws "Unexpected token '<'", which sanitizes down to a fragment that
+    // cannot distinguish "your PAT is wrong" from "the API changed shape".
+    const contentType = res.headers?.get("content-type") ?? "";
+    if (res.status === 203 || !/\bjson\b/i.test(contentType)) {
+      throw new Error(
+        sanitizeError(
+          `${method} returned HTTP ${res.status} with a non-JSON body ` +
+            `(content-type: ${contentType || "none"}) — this usually means PAT ` +
+            `authentication failed; check the token's validity and scopes`
+        )
+      );
+    }
+
     return (await res.json()) as T;
   }
 

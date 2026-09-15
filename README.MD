@@ -220,6 +220,15 @@ created) and `.live-test-runs/<runId>-report.json`. If a run is interrupted, the
 manifest is what lets a later `--cleanup` remove the leftovers. Work items are
 soft-deleted to the project Recycle Bin, never destroyed.
 
+**Known limitation — the counts check is not production's counts code.** For
+speed, the harness asks Analytics for one tag at a time
+(`$filter=Tags/any(t: t/TagName eq '…')`, then counts the returned rows), while
+production's `TagCountCacheService.fetchCounts` pages every tagged work item in
+the org with `$filter=Tags/any()` and aggregates client-side over lowercased tag
+names. A green "List tags + counts" therefore proves that Analytics reports the
+right number for a known tag; it does **not** exercise production's filter, its
+paging, or its case-folding, so do not read it as coverage of the count feature.
+
 ### Running it in CI
 
 `.github/workflows/live-test.yml` runs the harness on manual dispatch only. It

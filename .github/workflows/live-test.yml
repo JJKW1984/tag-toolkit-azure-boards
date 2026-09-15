@@ -19,16 +19,21 @@ jobs:
     # That approval replaces the CLI's interactive confirmation, which has no
     # terminal to run in here.
     environment: live-test
+    # A hung request would otherwise ride GitHub's 6-hour default with the PAT
+    # live in the runner and test data sitting in the project the whole time.
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v6
+      # Every action is SHA-pinned: this job handles a PAT, and a mutable tag
+      # can be repointed at new code by anyone who can push to the action repo.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 #v6.1.0
 
-      - uses: pnpm/action-setup@v5
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 #v5.0.0
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 #v6.5.0
         with:
           node-version: 24
           cache: "pnpm"
@@ -52,8 +57,12 @@ jobs:
             --work-item-type "$WORK_ITEM_TYPE" \
             --yes
 
-      - name: Sweep up any data left by a failed run
-        if: failure()
+      - name: Sweep up any data left by an incomplete run
+        # always(), not failure(): a cancelled job or a runner timeout strands
+        # data just as readily as a failure, and those two cases skip failure().
+        # The sweep is a no-op when no manifest is still in-progress, and the
+        # harness exits 0 with "Nothing to clean up", so this is safe to always run.
+        if: always()
         env:
           AZDO_TEST_PAT: ${{ secrets.AZDO_TEST_PAT }}
         run: pnpm live-test --cleanup-all --pat "$AZDO_TEST_PAT"

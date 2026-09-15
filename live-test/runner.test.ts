@@ -169,7 +169,7 @@ describe("cleanupRun", () => {
     // that fails early leaves a phantom entry here. A 404 on it means the goal
     // is already met — counting it as a failure would pin the run in-progress
     // forever and every future sweep would retry something that cannot exist.
-    store.addTag("never-created");
+    store.addTag("livetest-r1-never-created");
 
     await expect(cleanupRun(client, store, () => undefined)).resolves.toBeUndefined();
     expect(store.manifest.status).toBe("cleaned");
@@ -178,11 +178,68 @@ describe("cleanupRun", () => {
   it("does not log a scary line for an already-gone tag", async () => {
     const client = new FakeAdoClient();
     const store = newStore();
-    store.addTag("never-created");
+    store.addTag("livetest-r1-never-created");
 
     const lines: string[] = [];
     await cleanupRun(client, store, (m) => lines.push(m));
 
     expect(lines.some((l) => l.includes("could not delete"))).toBe(false);
+  });
+
+  it("is safe to re-run: a second sweep over the same manifest still succeeds", async () => {
+    const client = new FakeAdoClient();
+    const store = newStore();
+    const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
+    await ctx.createWorkItem(["livetest-r1-x-a"]);
+
+    await cleanupRun(client, store, () => undefined);
+    // Everything is already gone, so every delete now 404s. The second pass has
+    // to treat that as the goal being met, not as a failure.
+    await expect(cleanupRun(client, store, () => undefined)).resolves.toBeUndefined();
+    expect(store.manifest.status).toBe("cleaned");
+  });
+});
+
+describe("cleanupRun — provenance", () => {
+  it("refuses to delete a tag that is not a live-test tag", async () => {
+    const client = new FakeAdoClient();
+    client.seedWorkItem(["Bug"]);
+    const store = newStore();
+    // A stale, hand-edited, misplaced or planted manifest. Without a prefix
+    // check this deletes a real production tag and reports a clean sweep.
+    store.addTag("Bug");
+
+    const lines: string[] = [];
+    await cleanupRun(client, store, (m) => lines.push(m));
+
+    expect(client.tagNames()).toContain("Bug");
+    expect(lines.some((l) => l.includes("REFUSING to delete tag"))).toBe(true);
+  });
+
+  it("does not mark a manifest naming a foreign tag as cleaned", async () => {
+    const client = new FakeAdoClient();
+    client.seedWorkItem(["Bug"]);
+    const store = newStore();
+    store.addTag("Bug");
+
+    await cleanupRun(client, store, () => undefined);
+
+    // A manifest naming tags the harness did not create is corrupt; reporting a
+    // clean sweep would hide that from the human who needs to look at it.
+    expect(store.manifest.status).toBe("in-progress");
+  });
+
+  it("still deletes the harness's own tags alongside a refused one", async () => {
+    const client = new FakeAdoClient();
+    client.seedWorkItem(["Bug"]);
+    const store = newStore();
+    const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
+    await ctx.createWorkItem(["livetest-r1-x-a"]);
+    store.addTag("Bug");
+
+    await cleanupRun(client, store, () => undefined);
+
+    expect(client.tagNames()).not.toContain("livetest-r1-x-a");
+    expect(client.tagNames()).toContain("Bug");
   });
 });

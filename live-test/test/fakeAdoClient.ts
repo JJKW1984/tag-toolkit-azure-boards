@@ -138,7 +138,10 @@ export class FakeAdoClient implements IAdoClient {
   async deleteWorkItem(id: number): Promise<void> {
     this.maybeFail("deleteWorkItem");
     const item = this.items.get(id);
-    if (!item) throw new NotFoundError(`404 no work item ${id}`);
+    // Already soft-deleted reads back as not-found, like its sibling methods
+    // here and like the real API. cleanupRun relies on a second delete being a
+    // tolerated no-op rather than a silent success.
+    if (!item || item.deleted) throw new NotFoundError(`404 no work item ${id}`);
     item.deleted = true;
   }
 

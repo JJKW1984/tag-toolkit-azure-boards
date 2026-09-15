@@ -47,6 +47,35 @@ describe("sanitizeError", () => {
     expect(result).toBe("Unauthorized: Bearer [redacted]");
   });
 
+  it("redacts the credential in an Authorization: Basic header, not just the scheme", () => {
+    // The key/value run used to stop at the first whitespace, so the scheme was
+    // redacted and the base64 credential was left standing right next to it.
+    const result = sanitizeError(
+      new Error("request rejected: Authorization: Basic am9zZXBoOnNlY3JldA==")
+    );
+
+    expect(result).not.toContain("am9zZXBoOnNlY3JldA");
+    expect(result).toBe("request rejected: Authorization=[redacted]");
+  });
+
+  it("redacts the credential in an Authorization: Bearer header", () => {
+    const result = sanitizeError(new Error("rejected: Authorization: Bearer abc123.xyz"));
+
+    expect(result).not.toContain("abc123");
+    expect(result).toBe("rejected: Authorization=[redacted]");
+  });
+
+  it("redacts a bare Basic credential", () => {
+    const result = sanitizeError(new Error("sent Basic am9zZXBoOnNlY3JldA== upstream"));
+    expect(result).not.toContain("am9zZXBoOnNlY3JldA");
+  });
+
+  it("leaves the ordinary word Basic in prose alone", () => {
+    expect(sanitizeError(new Error("Basic auth is required"))).toBe(
+      "Basic auth is required"
+    );
+  });
+
   it("redacts token-like key/value pairs", () => {
     const result = sanitizeError(new Error("permission denied token=abc123 authorization:secret"));
     expect(result).toBe("permission denied token=[redacted] authorization=[redacted]");

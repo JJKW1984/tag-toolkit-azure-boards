@@ -1,4 +1,5 @@
-import { renameTagAbility } from "./renameTag";
+import { renameTagAbility, runWithPollSettings } from "./renameTag";
+import { FAST_POLL_FOR_TESTS } from "./support";
 import { FakeAdoClient } from "../test/fakeAdoClient";
 import { AbilityContext } from "../types";
 
@@ -41,7 +42,7 @@ describe("renameTag ability", () => {
     const client = new FakeAdoClient();
     jest.spyOn(client, "listTags").mockResolvedValue([]);
 
-    const result = await renameTagAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("not found in the tags list");
@@ -51,7 +52,7 @@ describe("renameTag ability", () => {
     const client = new FakeAdoClient();
     jest.spyOn(client, "renameTag").mockResolvedValue({ id: "1", name: "x", url: "" });
 
-    const result = await renameTagAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     expect(result.detail).toMatch(/still carries/);
@@ -61,7 +62,7 @@ describe("renameTag ability", () => {
     const client = new FakeAdoClient();
     client.failNext("renameTag", "denied for token=abc123");
 
-    const result = await renameTagAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     expect(result.detail).not.toContain("abc123");
@@ -74,7 +75,7 @@ describe("renameTag ability", () => {
       { id: 2, tags: ["unrelated"] },
     ]);
 
-    const result = await renameTagAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     expect(result.detail).toMatch(/did not receive/);
@@ -109,7 +110,7 @@ describe("renameTag ability", () => {
       }
     });
 
-    const result = await renameTagAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     expect(result.detail).toMatch(/still present in the tags list/);

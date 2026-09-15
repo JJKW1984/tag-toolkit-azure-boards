@@ -2,6 +2,7 @@
 import { sanitizeError } from "../src/utils/sanitizeError";
 import { isNotFound } from "./errors";
 import { ManifestStore } from "./manifest";
+import { LIVE_TEST_PREFIX } from "./naming";
 import { formatResultLine } from "./report";
 import { Ability, AbilityContext, AbilityResult, IAdoClient } from "./types";
 
@@ -71,6 +72,13 @@ export async function runAbilities(deps: RunDeps): Promise<AbilityResult[]> {
  * marking it cleaned would make later sweeps skip it and strand the surviving
  * resource in the live project. Re-running cleanup is safe because deleting
  * something already gone is tolerated.
+ *
+ * Provenance: a tag is deleted only when its name carries LIVE_TEST_PREFIX.
+ * `--cleanup <path>` takes an arbitrary path and `--cleanup-all` sweeps a
+ * directory, so a stale, hand-edited, misplaced or planted manifest could
+ * otherwise name a real production tag and have it deleted without a murmur.
+ * A manifest naming a foreign tag is corrupt by definition, so the run is also
+ * left in-progress: a human should look before anything reports a clean sweep.
  */
 export async function cleanupRun(
   client: IAdoClient,
@@ -92,7 +100,17 @@ export async function cleanupRun(
     }
   }
 
+  let foreign = 0;
   for (const tag of tags) {
+    if (!tag.startsWith(LIVE_TEST_PREFIX)) {
+      foreign += 1;
+      log(
+        `  REFUSING to delete tag ${JSON.stringify(tag)} — it does not start with ` +
+          `"${LIVE_TEST_PREFIX}", so this harness did not create it. Manifest ` +
+          `${store.path} is corrupt or was hand-edited; inspect it by hand.`
+      );
+      continue;
+    }
     try {
       await client.deleteTag(tag);
     } catch (e) {
@@ -100,6 +118,14 @@ export async function cleanupRun(
       unresolved += 1;
       log(`  could not delete tag ${tag}: ${sanitizeError(e)}`);
     }
+  }
+
+  if (foreign > 0) {
+    log(
+      `Cleanup refused: ${foreign} tag(s) in ${store.path} are not live-test tags. ` +
+        `Run left in-progress — review the manifest before retrying.`
+    );
+    return;
   }
 
   if (unresolved > 0) {

@@ -50,6 +50,23 @@ describe("parseCliArgs — run mode", () => {
       parseCliArgs(["--org", "o", "--project", "P", "--pat", "x", "--destroy"])
     ).toThrow(CliError);
   });
+
+  it("never echoes an argv value back in the parse error", () => {
+    // node:util parseArgs says "Unexpected argument '<token>'". Drop the --pat
+    // flag name, or add one stray token, and that token is the PAT itself.
+    try {
+      parseCliArgs([
+        "--org", "https://dev.azure.com/o", "--project", "P",
+        "MY-SECRET-PAT-VALUE", "--pat", "x",
+      ]);
+      throw new Error("expected parseCliArgs to reject a positional argument");
+    } catch (e) {
+      expect(e).toBeInstanceOf(CliError);
+      expect((e as Error).message).not.toContain("MY-SECRET-PAT-VALUE");
+      expect((e as Error).message).toContain("Unexpected positional argument");
+      expect((e as Error).message).toContain("Usage:");
+    }
+  });
 });
 
 describe("parseCliArgs — cleanup modes", () => {
@@ -128,6 +145,21 @@ describe("main — confirmation gate", () => {
     });
 
     expect(code).toBe(2);
+    expect(log.join("\n")).toContain("Usage:");
+  });
+
+  it("does not log a secret-looking positional argument", async () => {
+    const log: string[] = [];
+    const code = await main(
+      [
+        "--org", "https://dev.azure.com/o", "--project", "P",
+        "MY-SECRET-PAT-VALUE", "--pat", "x",
+      ],
+      { log: (m) => log.push(m), ask: async () => "", now: () => new Date() }
+    );
+
+    expect(code).toBe(2);
+    expect(log.join("\n")).not.toContain("MY-SECRET-PAT-VALUE");
     expect(log.join("\n")).toContain("Usage:");
   });
 });

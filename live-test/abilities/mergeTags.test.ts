@@ -1,4 +1,5 @@
-import { mergeTagsAbility } from "./mergeTags";
+import { mergeTagsAbility, runWithPollSettings } from "./mergeTags";
+import { FAST_POLL_FOR_TESTS } from "./support";
 import { FakeAdoClient } from "../test/fakeAdoClient";
 import { AbilityContext } from "../types";
 
@@ -60,7 +61,7 @@ describe("mergeTags ability", () => {
     const client = new FakeAdoClient();
     jest.spyOn(client, "deleteTag").mockResolvedValue(undefined);
 
-    const result = await mergeTagsAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     // With delete stubbed out the work items still carry the source, which the
@@ -72,17 +73,34 @@ describe("mergeTags ability", () => {
     const client = new FakeAdoClient();
     jest.spyOn(client, "setWorkItemTags").mockResolvedValue(undefined);
 
-    const result = await mergeTagsAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     expect(result.detail).toMatch(/did not receive/);
+  });
+
+  it("refuses to write to a queried work item the harness did not create", async () => {
+    const client = new FakeAdoClient();
+    // A pre-existing work item that genuinely carries the source tag. The
+    // `includes(source)` guard only screens WIQL false positives, so without an
+    // ownership check this item gets setWorkItemTags'd and is never recorded in
+    // the manifest — cleanup could not undo it.
+    const foreign = client.seedWorkItem(["livetest-r1-merge-a"]);
+
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
+
+    expect(result.status).toBe("fail");
+    expect(result.detail).toMatch(/did not create/);
+    expect(result.detail).toContain(String(foreign));
+    // Untouched: the refusal happens before the first write.
+    expect(client.tagsOf(foreign)).toEqual(["livetest-r1-merge-a"]);
   });
 
   it("reports a sanitized failure when the client throws", async () => {
     const client = new FakeAdoClient();
     client.failNext("queryWorkItemIdsByTag", "wiql blew up at https://dev.azure.com/o");
 
-    const result = await mergeTagsAbility.run(contextFor(client));
+    const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
     expect(result.detail).not.toContain("https://dev.azure.com");

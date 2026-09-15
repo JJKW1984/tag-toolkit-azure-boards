@@ -1,14 +1,20 @@
 // live-test/adoClient.test.ts
 import { AdoClient, orgNameFromUrl } from "./adoClient";
+import { isNotFound, NotFoundError } from "./errors";
 
-function jsonResponse(body: unknown, status = 200): Response {
+function response(body: unknown, status: number, contentType: string): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: "",
+    headers: { get: (name: string) => (name === "content-type" ? contentType : null) },
     json: async () => body,
-    text: async () => JSON.stringify(body),
+    text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
   } as unknown as Response;
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return response(body, status, "application/json; charset=utf-8");
 }
 
 function newClient(): AdoClient {
@@ -66,6 +72,59 @@ describe("listTags", () => {
       .mockResolvedValue(jsonResponse({ message: "nope" }, 403)) as unknown as typeof fetch;
 
     await expect(newClient().listTags()).rejects.toThrow(/403/);
+  });
+
+  it("throws a NotFoundError on a 404 so cleanup can treat it as already gone", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(jsonResponse({ message: "gone" }, 404)) as unknown as typeof fetch;
+
+    // This branch drives the cleanup not-found contract and the CI sweep's exit
+    // code: if a 404 stopped mapping to NotFoundError, every phantom tag would
+    // count as unresolved and pin every run in-progress forever.
+    await expect(newClient().listTags()).rejects.toThrow(NotFoundError);
+    await expect(newClient().listTags()).rejects.toThrow(/404/);
+  });
+
+  it("classifies the 404 as not-found via isNotFound", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(jsonResponse({ message: "gone" }, 404)) as unknown as typeof fetch;
+
+    const error = await newClient()
+      .deleteTag("1")
+      .then(() => undefined)
+      .catch((e: unknown) => e);
+
+    expect(isNotFound(error)).toBe(true);
+  });
+});
+
+describe("non-JSON success responses", () => {
+  it("names authentication as the likely cause of an HTTP 203 sign-in page", async () => {
+    // A bad PAT gets 203 + HTML, not 401, and res.ok is true for 203.
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(
+        response("<html><body>Sign In</body></html>", 203, "text/html")
+      ) as unknown as typeof fetch;
+
+    await expect(newClient().listTags()).rejects.toThrow(/203/);
+    await expect(newClient().listTags()).rejects.toThrow(/authentication failed/);
+  });
+
+  it("rejects a 200 whose body is not JSON rather than surfacing a parse error", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(response("<html></html>", 200, "text/html")) as unknown as typeof fetch;
+
+    const error = await newClient()
+      .listTags()
+      .then(() => undefined)
+      .catch((e: unknown) => e as Error);
+
+    expect(error?.message).toContain("non-JSON body");
+    expect(error?.message).not.toContain("Unexpected token");
   });
 });
 

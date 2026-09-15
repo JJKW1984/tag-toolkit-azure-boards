@@ -93,6 +93,93 @@ describe("ManifestStore.open", () => {
   });
 });
 
+describe("ManifestStore.open — shape validation", () => {
+  // --cleanup takes an arbitrary path and --cleanup-all sweeps a directory, so
+  // open() is the gate between "some JSON file" and "a list of things to delete
+  // in a live project". A bare `as RunManifest` cast is not that gate.
+  function writeRaw(body: unknown): string {
+    const p = path.join(tempDir(), "m.json");
+    fs.writeFileSync(p, JSON.stringify(body), "utf8");
+    return p;
+  }
+
+  const good = {
+    runId: "r1",
+    org: "https://dev.azure.com/o",
+    project: "P",
+    status: "in-progress",
+    workItems: [1, 2],
+    tags: ["livetest-r1-x-a"],
+  };
+
+  it("accepts a well-formed manifest", () => {
+    expect(ManifestStore.open(writeRaw(good)).manifest.tags).toEqual(["livetest-r1-x-a"]);
+  });
+
+  it("rejects a JSON value that is not an object", () => {
+    expect(() => ManifestStore.open(writeRaw([1, 2, 3]))).toThrow(/not a valid run manifest/i);
+  });
+
+  it.each(["runId", "org", "project"] as const)(
+    "rejects a manifest whose %s is missing",
+    (key) => {
+      const bad: Record<string, unknown> = { ...good };
+      delete bad[key];
+      expect(() => ManifestStore.open(writeRaw(bad))).toThrow(new RegExp(`"${key}"`));
+    }
+  );
+
+  it("rejects an empty runId", () => {
+    expect(() => ManifestStore.open(writeRaw({ ...good, runId: "" }))).toThrow(/runId/);
+  });
+
+  it("rejects an unknown status", () => {
+    expect(() => ManifestStore.open(writeRaw({ ...good, status: "done" }))).toThrow(/status/);
+  });
+
+  it("rejects workItems that are not all numbers", () => {
+    expect(() => ManifestStore.open(writeRaw({ ...good, workItems: [1, "2"] }))).toThrow(
+      /workItems/
+    );
+  });
+
+  it("rejects workItems that is not an array", () => {
+    expect(() => ManifestStore.open(writeRaw({ ...good, workItems: 7 }))).toThrow(
+      /workItems/
+    );
+  });
+
+  it("rejects tags that are not all strings", () => {
+    expect(() => ManifestStore.open(writeRaw({ ...good, tags: ["a", 3] }))).toThrow(/tags/);
+  });
+
+  it("does not echo a manifest value in the rejection message", () => {
+    // The message is logged and uploaded as a CI artifact.
+    const p = writeRaw({ ...good, status: "SECRET-LOOKING-VALUE" });
+    expect(() => ManifestStore.open(p)).toThrow();
+    try {
+      ManifestStore.open(p);
+    } catch (e) {
+      expect((e as Error).message).not.toContain("SECRET-LOOKING-VALUE");
+    }
+  });
+});
+
+describe("flush atomicity", () => {
+  it("replaces the manifest by rename and leaves no temp file behind", () => {
+    const dir = tempDir();
+    const store = ManifestStore.create(dir, { runId: "r1", org: "o", project: "p" });
+
+    store.addWorkItem(1);
+    store.addTag("livetest-r1-x-a");
+
+    // writeFileSync truncates in place: a crash mid-flush would lose every id
+    // recorded earlier, which is exactly what this file exists to prevent.
+    expect(fs.readdirSync(dir)).toEqual(["r1.json"]);
+    expect(readRaw(store.path).workItems).toEqual([1]);
+  });
+});
+
 describe("listManifestPaths", () => {
   it("returns manifests but not report files", () => {
     const dir = tempDir();

@@ -1,10 +1,14 @@
 import { testTag } from "../naming";
+import { pollUntil } from "../poll";
 import { Ability, AbilityContext, AbilityResult } from "../types";
-import { timed } from "./support";
+import { PollSettings, timed } from "./support";
 
 const NAME = "Rename tag";
 
-async function run(ctx: AbilityContext): Promise<AbilityResult> {
+async function run(
+  ctx: AbilityContext,
+  poll: PollSettings = {}
+): Promise<AbilityResult> {
   return timed(NAME, async () => {
     const oldName = testTag(ctx.runId, "rename", "old");
     const newName = testTag(ctx.runId, "rename", "new");
@@ -25,24 +29,49 @@ async function run(ctx: AbilityContext): Promise<AbilityResult> {
     ctx.recordTag(newName);
     await ctx.client.renameTag(target.id, newName);
 
-    const after = await ctx.client.getWorkItemTags(ids);
-    const stale = after.find((wi) => wi.tags.includes(oldName));
-    if (stale) {
-      return { ok: false, detail: `work item ${stale.id} still carries ${oldName}` };
+    // The rewrite onto each work item is not guaranteed to have landed by the
+    // time the PATCH returns — the same asynchrony deleteTag polls for. Reading
+    // back once would flake on a real org while the identical delete path passes.
+    const propagated = await pollUntil({
+      probe: async () => await ctx.client.getWorkItemTags(ids),
+      until: (items) =>
+        items.every((wi) => !wi.tags.includes(oldName) && wi.tags.includes(newName)),
+      ...poll,
+    });
+
+    if (!propagated.ok) {
+      const stale = propagated.last.find((wi) => wi.tags.includes(oldName));
+      if (stale) {
+        return {
+          ok: false,
+          detail: `work item ${stale.id} still carries ${oldName} after ${propagated.elapsedMs}ms`,
+        };
+      }
+      const missing = propagated.last.find((wi) => !wi.tags.includes(newName));
+      return {
+        ok: false,
+        detail: `work item ${missing?.id} did not receive ${newName} after ${propagated.elapsedMs}ms`,
+      };
     }
 
-    const missing = after.find((wi) => !wi.tags.includes(newName));
-    if (missing) {
-      return { ok: false, detail: `work item ${missing.id} did not receive ${newName}` };
-    }
+    const delisted = await pollUntil({
+      probe: async () => await ctx.client.listTags(),
+      until: (listed) => !listed.some((t) => t.name === oldName),
+      ...poll,
+    });
 
-    const listed = await ctx.client.listTags();
-    if (listed.some((t) => t.name === oldName)) {
-      return { ok: false, detail: `${oldName} is still present in the tags list` };
+    if (!delisted.ok) {
+      return {
+        ok: false,
+        detail: `${oldName} is still present in the tags list after ${delisted.elapsedMs}ms`,
+      };
     }
 
     return { ok: true, detail: `renamed across ${ids.length} work items` };
   });
 }
 
-export const renameTagAbility: Ability = { name: NAME, run };
+export const renameTagAbility: Ability = { name: NAME, run: (ctx) => run(ctx) };
+
+/** Exported for unit tests so the poll budget can be shrunk. */
+export const runWithPollSettings = run;
