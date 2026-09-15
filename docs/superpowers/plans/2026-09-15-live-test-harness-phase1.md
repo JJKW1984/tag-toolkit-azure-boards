@@ -2945,11 +2945,48 @@ git commit -m "feat: add paging volume live-test ability"
 ### Task 15: Runner — orchestration and cleanup
 
 **Files:**
+- Create: `live-test/errors.ts`
 - Create: `live-test/runner.ts`
 - Test: `live-test/runner.test.ts`
+- Modify: `live-test/adoClient.ts` (throw `NotFoundError` on a 404 response)
+- Modify: `live-test/test/fakeAdoClient.ts` (throw `NotFoundError` from its four not-found paths)
 
 **Interfaces:**
 - Consumes: `Ability`, `AbilityContext`, `AbilityResult`, `IAdoClient`; `ManifestStore`; `sanitizeError`.
+- Produces: `NotFoundError`, `isNotFound(e: unknown): boolean` from `live-test/errors.ts`.
+
+### Why cleanup needs a not-found contract
+
+`cleanupRun` must distinguish "this is already gone" from "I could not tell". A 404 means the
+delete's goal is already met and the run is genuinely clean; any other error means something may
+still be alive in the project. Conflating the two breaks in both directions: treating a 404 as a
+failure pins a run in-progress forever (the rename and merge abilities record a tag *before*
+creating it, so an early failure leaves a phantom tag that will 404 on every future sweep), while
+treating every error as success strands real resources.
+
+The status arrives three different ways, so the classifier handles all three:
+
+```typescript
+// live-test/errors.ts
+
+/** A delete/read whose target does not exist. Raised by the raw-fetch client paths. */
+export class NotFoundError extends Error {}
+
+/**
+ * True when an error means "the target does not exist".
+ * Covers our own raw-fetch errors, the azure-devops-node-api library's errors
+ * (which carry a numeric `statusCode`), and the in-memory fake.
+ */
+export function isNotFound(e: unknown): boolean {
+  if (e instanceof NotFoundError) return true;
+  return (e as { statusCode?: number } | null)?.statusCode === 404;
+}
+```
+
+In `live-test/adoClient.ts`'s `request()`, throw `NotFoundError` instead of `Error` when
+`res.status === 404`, keeping the message text identical so existing assertions still match. In
+`live-test/test/fakeAdoClient.ts`, throw `NotFoundError` from each of its four
+`404 no tag …` / `404 no work item …` sites, again leaving the message text unchanged.
 - Produces:
   - `buildContext(deps: { client, store, runId, workItemType }): AbilityContext`
   - `runAbilities(deps: { client, store, runId, workItemType, abilities, log }): Promise<AbilityResult[]>`
@@ -3105,7 +3142,7 @@ describe("cleanupRun", () => {
     await expect(client.getWorkItemTags([id])).rejects.toThrow(/404/);
   });
 
-  it("keeps going when one delete fails and still marks the run cleaned", async () => {
+  it("keeps going when one delete fails but leaves the run in-progress for a retry", async () => {
     const client = new FakeAdoClient();
     const store = newStore();
     const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
@@ -3116,17 +3153,34 @@ describe("cleanupRun", () => {
     const lines: string[] = [];
     await cleanupRun(client, store, (m) => lines.push(m));
 
-    expect(store.manifest.status).toBe("cleaned");
+    // Marking a partially-failed run "cleaned" would make --cleanup-all skip it
+    // forever, stranding the surviving resource in the live project.
+    expect(store.manifest.status).toBe("in-progress");
     expect(lines.some((l) => l.includes("transient 500"))).toBe(true);
   });
 
-  it("tolerates a tag that is already gone", async () => {
+  it("treats an already-gone tag as cleaned, not as a failure", async () => {
     const client = new FakeAdoClient();
     const store = newStore();
+    // The rename and merge abilities record a tag before creating it, so a run
+    // that fails early leaves a phantom entry here. A 404 on it means the goal
+    // is already met — counting it as a failure would pin the run in-progress
+    // forever and every future sweep would retry something that cannot exist.
     store.addTag("never-created");
 
     await expect(cleanupRun(client, store, () => undefined)).resolves.toBeUndefined();
     expect(store.manifest.status).toBe("cleaned");
+  });
+
+  it("does not log a scary line for an already-gone tag", async () => {
+    const client = new FakeAdoClient();
+    const store = newStore();
+    store.addTag("never-created");
+
+    const lines: string[] = [];
+    await cleanupRun(client, store, (m) => lines.push(m));
+
+    expect(lines.some((l) => l.includes("could not delete"))).toBe(false);
   });
 });
 ```
@@ -3205,6 +3259,12 @@ export async function runAbilities(deps: RunDeps): Promise<AbilityResult[]> {
  * Best-effort teardown: every work item is soft-deleted and every tag removed.
  * Individual failures are logged and skipped — a 404 on something already gone
  * must not strand the rest of the run's data.
+ *
+ * The manifest is marked "cleaned" only when every delete succeeded. A run that
+ * failed a delete stays "in-progress" so `--cleanup-all` picks it up again;
+ * marking it cleaned would make later sweeps skip it and strand the surviving
+ * resource in the live project. Re-running cleanup is safe because deleting
+ * something already gone is tolerated.
  */
 export async function cleanupRun(
   client: IAdoClient,
@@ -3213,11 +3273,15 @@ export async function cleanupRun(
 ): Promise<void> {
   const { workItems, tags } = store.manifest;
   log(`Cleaning up ${workItems.length} work items and ${tags.length} tags…`);
+  let unresolved = 0;
 
   for (const id of workItems) {
     try {
       await client.deleteWorkItem(id);
     } catch (e) {
+      // Already gone is the outcome we wanted; anything else may still be alive.
+      if (isNotFound(e)) continue;
+      unresolved += 1;
       log(`  could not delete work item ${id}: ${sanitizeError(e)}`);
     }
   }
@@ -3226,8 +3290,18 @@ export async function cleanupRun(
     try {
       await client.deleteTag(tag);
     } catch (e) {
+      if (isNotFound(e)) continue;
+      unresolved += 1;
       log(`  could not delete tag ${tag}: ${sanitizeError(e)}`);
     }
+  }
+
+  if (unresolved > 0) {
+    log(
+      `Cleanup incomplete: ${unresolved} deletion(s) failed. Run left in-progress — ` +
+        `retry with: pnpm live-test --cleanup ${store.path} --pat <pat>`
+    );
+    return;
   }
 
   store.markCleaned();
@@ -3338,8 +3412,46 @@ describe("main — cleanup mode", () => {
     expect(code).toBe(0);
     expect(ManifestStore.open(store.path).manifest.status).toBe("cleaned");
   });
+
+  it("returns 1 and says so when the manifest cannot be read", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "live-test-main-"));
+    const corrupt = path.join(dir, "corrupt.json");
+    fs.writeFileSync(corrupt, "{ not json", "utf8");
+
+    const log: string[] = [];
+    const code = await main(["--cleanup", corrupt, "--pat", "x"], {
+      log: (m) => log.push(m),
+      ask: async () => "",
+      now: () => new Date(),
+    });
+
+    expect(code).toBe(1);
+    expect(log.join("\n")).toContain("Could not read");
+  });
+
+  it("returns 1 when a manifest's org URL cannot be used", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "live-test-main-"));
+    const store = ManifestStore.create(dir, {
+      runId: "r2",
+      org: "not-an-azure-devops-url",
+      project: "P",
+    });
+
+    const log: string[] = [];
+    const code = await main(["--cleanup", store.path, "--pat", "x"], {
+      log: (m) => log.push(m),
+      ask: async () => "",
+      now: () => new Date(),
+    });
+
+    expect(code).toBe(1);
+    expect(log.join("\n")).toContain("cleanup failed");
+  });
 });
 ```
+
+Both new tests stay off the network: the first never constructs a client, and the second fails
+inside the `AdoClient` constructor's URL parsing before any request is made.
 
 The `--cleanup` test exercises real `AdoClient` construction but never reaches the
 network, because the manifest carries no work items or tags.
@@ -3399,25 +3511,57 @@ export async function main(argv: string[], io: MainIo = defaultIo): Promise<numb
   }
 
   if (opts.mode === "cleanup" || opts.mode === "cleanup-all") {
-    const paths =
-      opts.mode === "cleanup"
-        ? [opts.manifestPath as string]
-        : listManifestPaths(RUNS_DIR).filter(
-            (p) => ManifestStore.open(p).manifest.status === "in-progress"
-          );
+    const stores: ManifestStore[] = [];
+    let failed = 0;
 
-    for (const manifestPath of paths) {
-      const store = ManifestStore.open(manifestPath);
-      io.log(`Cleaning ${manifestPath} (${store.manifest.project})`);
-      const client = new AdoClient({
-        orgUrl: store.manifest.org,
-        project: store.manifest.project,
-        pat: opts.pat,
-      });
-      await cleanupRun(client, store, io.log);
+    if (opts.mode === "cleanup") {
+      try {
+        stores.push(ManifestStore.open(opts.manifestPath as string));
+      } catch (e) {
+        io.log(`Could not read ${opts.manifestPath}: ${sanitizeError(e)}`);
+        return 1;
+      }
+    } else {
+      // One unreadable file must not abort the sweep: the other in-progress
+      // runs still have real resources waiting to be deleted.
+      for (const p of listManifestPaths(RUNS_DIR)) {
+        try {
+          const store = ManifestStore.open(p);
+          if (store.manifest.status === "in-progress") stores.push(store);
+        } catch (e) {
+          failed += 1;
+          io.log(`Skipping unreadable manifest ${p}: ${sanitizeError(e)}`);
+        }
+      }
     }
-    if (paths.length === 0) io.log("Nothing to clean up.");
-    return 0;
+
+    if (stores.length === 0 && failed === 0) {
+      io.log("Nothing to clean up.");
+      return 0;
+    }
+
+    for (const store of stores) {
+      io.log(`Cleaning ${store.path} (${store.manifest.project})`);
+      try {
+        const client = new AdoClient({
+          orgUrl: store.manifest.org,
+          project: store.manifest.project,
+          pat: opts.pat,
+        });
+        await cleanupRun(client, store, io.log);
+      } catch (e) {
+        failed += 1;
+        io.log(`  cleanup failed for ${store.path}: ${sanitizeError(e)}`);
+        continue;
+      }
+      // cleanupRun marks a manifest cleaned only when every delete resolved,
+      // so this is the signal that resources may still be alive.
+      if (store.manifest.status !== "cleaned") failed += 1;
+    }
+
+    // CI sweeps this; reporting success while resources survive would hide
+    // exactly the failure the sweep exists to catch.
+    return failed > 0 ? 1 : 0;
   }
 
   const org = opts.org as string;
@@ -3485,9 +3629,16 @@ function confirmYes(answer: string): boolean {
 
 // Entry point when run via `tsx live-test/cli.ts`.
 if (require.main === module) {
-  void main(process.argv.slice(2)).then((code) => {
-    process.exitCode = code;
-  });
+  void main(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((e) => {
+      // A throw that escapes main() must still exit cleanly with a readable
+      // message rather than an unhandled-rejection stack trace.
+      console.error(sanitizeError(e));
+      process.exitCode = 1;
+    });
 }
 ```
 
