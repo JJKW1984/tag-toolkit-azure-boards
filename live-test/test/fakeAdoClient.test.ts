@@ -43,6 +43,24 @@ describe("FakeAdoClient delete cascade", () => {
   });
 });
 
+describe("FakeAdoClient soft-deleted work items", () => {
+  it("rejects setWorkItemTags on a soft-deleted work item", async () => {
+    const c = new FakeAdoClient();
+    const id = await c.createWorkItem("Task", "t", ["a"]);
+    await c.deleteWorkItem(id);
+
+    await expect(c.setWorkItemTags(id, ["b"])).rejects.toThrow(/404/);
+  });
+
+  it("returns no tags for a soft-deleted work item via tagsOf", async () => {
+    const c = new FakeAdoClient();
+    const id = await c.createWorkItem("Task", "t", ["a"]);
+    await c.deleteWorkItem(id);
+
+    expect(c.tagsOf(id)).toEqual([]);
+  });
+});
+
 describe("FakeAdoClient rename", () => {
   it("rewrites the tag on every work item", async () => {
     const c = new FakeAdoClient();
@@ -53,6 +71,18 @@ describe("FakeAdoClient rename", () => {
 
     expect(c.tagsOf(id)).toEqual(["new"]);
     expect(c.tagNames()).toEqual(["new"]);
+  });
+
+  it("rejects a rename onto a name already used by a different tag", async () => {
+    const c = new FakeAdoClient();
+    await c.createWorkItem("Task", "t", ["taken"]);
+    const id = await c.createWorkItem("Task", "t", ["old"]);
+    const tag = (await c.listTags()).find((t) => t.name === "old");
+
+    await expect(c.renameTag(tag!.id, "taken")).rejects.toThrow();
+    // Unchanged: no merge-on-collision, no second registry entry for "taken".
+    expect(c.tagsOf(id)).toEqual(["old"]);
+    expect(c.tagNames().sort()).toEqual(["old", "taken"]);
   });
 });
 
@@ -90,6 +120,27 @@ describe("FakeAdoClient queries", () => {
       { id: one, tags: ["a"] },
       { id: two, tags: ["b"] },
     ]);
+  });
+
+  it("rejects the whole batch if any requested id is deleted, mirroring ADO's default errorPolicy: Fail", async () => {
+    const c = new FakeAdoClient();
+    const one = await c.createWorkItem("Task", "t", ["a"]);
+    const two = await c.createWorkItem("Task", "t", ["b"]);
+    await c.deleteWorkItem(two);
+
+    await expect(c.getWorkItemTags([one, two])).rejects.toThrow(/404/);
+  });
+
+  it("rejects the whole batch if any requested id is unknown", async () => {
+    const c = new FakeAdoClient();
+    const one = await c.createWorkItem("Task", "t", ["a"]);
+
+    await expect(c.getWorkItemTags([one, 999999])).rejects.toThrow(/404/);
+  });
+
+  it("returns an empty array for an empty id list", async () => {
+    const c = new FakeAdoClient();
+    expect(await c.getWorkItemTags([])).toEqual([]);
   });
 });
 

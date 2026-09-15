@@ -45,7 +45,9 @@ export class FakeAdoClient implements IAdoClient {
   }
 
   tagsOf(id: number): string[] {
-    return [...(this.items.get(id)?.tags ?? [])];
+    const item = this.items.get(id);
+    if (!item || item.deleted) return [];
+    return [...item.tags];
   }
 
   private registerTag(name: string): void {
@@ -67,6 +69,16 @@ export class FakeAdoClient implements IAdoClient {
     this.maybeFail("renameTag");
     const current = this.tags.get(tagId);
     if (!current) throw new Error(`404 no tag ${tagId}`);
+    // Deliberately not emulating a merge-on-collision: real ADO's behavior when
+    // renaming onto an existing tag name is unverified, and a guessed emulation
+    // would be worse than a loud refusal. Refuse instead of creating two
+    // registry entries that resolve to the same name — a state real ADO can't be in.
+    const collision = [...this.tags.entries()].find(
+      ([id, name]) => id !== tagId && name === newName
+    );
+    if (collision) {
+      throw new Error(`409 tag name "${newName}" already in use`);
+    }
     this.tags.set(tagId, newName);
     for (const item of this.items.values()) {
       item.tags = item.tags.map((t) => (t === current ? newName : t));
@@ -100,16 +112,24 @@ export class FakeAdoClient implements IAdoClient {
 
   async getWorkItemTags(ids: number[]): Promise<WorkItemTags[]> {
     this.maybeFail("getWorkItemTags");
-    return ids
-      .map((id) => this.items.get(id))
-      .filter((i): i is FakeWorkItem => Boolean(i) && !i!.deleted)
-      .map((i) => ({ id: i.id, tags: [...i.tags] }));
+    if (ids.length === 0) return [];
+    // Real getWorkItemsBatch sends no errorPolicy, so ADO's default (Fail)
+    // rejects the whole batch if any requested id is missing or deleted —
+    // it does not silently return a shorter array.
+    for (const id of ids) {
+      const item = this.items.get(id);
+      if (!item || item.deleted) throw new Error(`404 no work item ${id}`);
+    }
+    return ids.map((id) => {
+      const item = this.items.get(id) as FakeWorkItem;
+      return { id: item.id, tags: [...item.tags] };
+    });
   }
 
   async setWorkItemTags(id: number, tags: string[]): Promise<void> {
     this.maybeFail("setWorkItemTags");
     const item = this.items.get(id);
-    if (!item) throw new Error(`404 no work item ${id}`);
+    if (!item || item.deleted) throw new Error(`404 no work item ${id}`);
     item.tags = [...tags];
     for (const t of tags) this.registerTag(t);
   }
