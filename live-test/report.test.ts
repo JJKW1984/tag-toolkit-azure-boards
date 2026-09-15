@@ -28,6 +28,20 @@ describe("formatResultLine", () => {
       "[FAIL] Delete tag (10004ms) — Analytics count still 1 after 10s poll"
     );
   });
+
+  it("redacts secrets that leaked into a failure detail", () => {
+    const leaky: AbilityResult = {
+      name: "List tags + counts",
+      status: "fail",
+      durationMs: 12,
+      detail: "GET https://dev.azure.com/o/_apis/wit/tags failed, token=abc123secret",
+    };
+
+    const line = formatResultLine(leaky);
+
+    expect(line).not.toContain("abc123secret");
+    expect(line).not.toContain("https://dev.azure.com");
+  });
 });
 
 describe("formatSummary", () => {

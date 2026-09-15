@@ -5,12 +5,12 @@ import { AbilityResult, RunReport } from "./types";
 
 export function formatResultLine(result: AbilityResult): string {
   const head = `[${result.status === "pass" ? "PASS" : "FAIL"}] ${result.name} (${result.durationMs}ms)`;
-  return result.detail ? `${head} — ${result.detail}` : head;
+  return result.detail !== undefined ? `${head} — ${sanitizeError(result.detail)}` : head;
 }
 
-export function formatSummary(results: AbilityResult[], reportPath: string): string {
+export function formatSummary(results: AbilityResult[], reportFilePath: string): string {
   const passed = results.filter((r) => r.status === "pass").length;
-  return `${passed}/${results.length} passed. Report: ${reportPath}`;
+  return `${passed}/${results.length} passed. Report: ${reportFilePath}`;
 }
 
 export function allPassed(results: AbilityResult[]): boolean {
