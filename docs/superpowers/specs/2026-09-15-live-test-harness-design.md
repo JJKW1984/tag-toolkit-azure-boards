@@ -59,18 +59,18 @@ runner.ts (--cleanup <manifest>)
 
 Sibling to `src/`, **not** included in the webpack bundle or the packaged `.vsix`. Run via `tsx` (new devDependency, added purely for local script execution — no build step needed for this tooling).
 
-| File | Responsibility |
-|---|---|
-| `cli.ts` | Flag parsing (`--org`, `--project`, `--pat`, `--yes`, `--cleanup`, `--work-item-type`), confirmation prompt, dispatch to `runner.ts` |
-| `adoClient.ts` | PAT-authenticated calls: Tags API CRUD, Analytics OData counts, WIT create/get/update/delete/WIQL (via `azure-devops-node-api`) |
-| `manifest.ts` | Read/write `.live-test-runs/<runId>.json`; append-as-created semantics so a crash never loses track of what exists |
-| `report.ts` | Console table renderer (live per-ability line + summary) and JSON report writer |
-| `runner.ts` | Orchestration: confirm → run abilities sequentially, continue on failure → report → prompt cleanup → cleanup |
-| `abilities/listTagsAndCounts.ts` | List-tags + live-count contract |
-| `abilities/renameTag.ts` | Rename contract |
-| `abilities/mergeTags.ts` | Multi-source atomic merge contract |
-| `abilities/deleteTag.ts` | Delete/cascade contract |
-| `abilities/pagingVolume.ts` | List-API-under-volume contract |
+| File                             | Responsibility                                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `cli.ts`                         | Flag parsing (`--org`, `--project`, `--pat`, `--yes`, `--cleanup`, `--work-item-type`), confirmation prompt, dispatch to `runner.ts` |
+| `adoClient.ts`                   | PAT-authenticated calls: Tags API CRUD, Analytics OData counts, WIT create/get/update/delete/WIQL (via `azure-devops-node-api`)      |
+| `manifest.ts`                    | Read/write `.live-test-runs/<runId>.json`; append-as-created semantics so a crash never loses track of what exists                   |
+| `report.ts`                      | Console table renderer (live per-ability line + summary) and JSON report writer                                                      |
+| `runner.ts`                      | Orchestration: confirm → run abilities sequentially, continue on failure → report → prompt cleanup → cleanup                         |
+| `abilities/listTagsAndCounts.ts` | List-tags + live-count contract                                                                                                      |
+| `abilities/renameTag.ts`         | Rename contract                                                                                                                      |
+| `abilities/mergeTags.ts`         | Multi-source atomic merge contract                                                                                                   |
+| `abilities/deleteTag.ts`         | Delete/cascade contract                                                                                                              |
+| `abilities/pagingVolume.ts`      | List-API-under-volume contract                                                                                                       |
 
 Each ability file exports:
 
@@ -286,36 +286,36 @@ Relies on the `cli.ts` exit-code contract noted under [Safety](#safety): non-zer
 
 ## Files to Create
 
-| File | Purpose |
-|---|---|
-| `live-test/cli.ts` | Entry point, flag parsing, confirmation |
-| `live-test/adoClient.ts` | PAT-authenticated REST calls |
-| `live-test/manifest.ts` | Run manifest read/write |
-| `live-test/report.ts` | Console + JSON reporting |
-| `live-test/runner.ts` | Orchestration |
-| `live-test/abilities/listTagsAndCounts.ts` | Ability test |
-| `live-test/abilities/renameTag.ts` | Ability test |
-| `live-test/abilities/mergeTags.ts` | Ability test |
-| `live-test/abilities/deleteTag.ts` | Ability test |
-| `live-test/abilities/pagingVolume.ts` | Ability test |
-| `live-test/ui/playwright.config.ts` | Playwright project config (Phase 2) |
-| `live-test/ui/fixtures.ts` | Global setup/teardown, reusing `adoClient.ts`/`manifest.ts` (Phase 2) |
-| `live-test/ui/auth.ts` | Persistent-context login/session-expiry handling (Phase 2) |
-| `live-test/ui/specs/renameTag.spec.ts` | UI ability test (Phase 2) |
-| `live-test/ui/specs/mergeTags.spec.ts` | UI ability test (Phase 2) |
-| `live-test/ui/specs/deleteTag.spec.ts` | UI ability test (Phase 2) |
-| `live-test/ui/specs/searchAndFilter.spec.ts` | UI ability test (Phase 2) |
-| `live-test/ui/specs/alphaNav.spec.ts` | UI ability test (Phase 2) |
-| `live-test/ui/specs/pagination.spec.ts` | UI ability test (Phase 2) |
-| `.github/workflows/live-test.yml` | CI workflow: manual dispatch, gated by the `live-test` GitHub Environment |
+| File                                         | Purpose                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `live-test/cli.ts`                           | Entry point, flag parsing, confirmation                                   |
+| `live-test/adoClient.ts`                     | PAT-authenticated REST calls                                              |
+| `live-test/manifest.ts`                      | Run manifest read/write                                                   |
+| `live-test/report.ts`                        | Console + JSON reporting                                                  |
+| `live-test/runner.ts`                        | Orchestration                                                             |
+| `live-test/abilities/listTagsAndCounts.ts`   | Ability test                                                              |
+| `live-test/abilities/renameTag.ts`           | Ability test                                                              |
+| `live-test/abilities/mergeTags.ts`           | Ability test                                                              |
+| `live-test/abilities/deleteTag.ts`           | Ability test                                                              |
+| `live-test/abilities/pagingVolume.ts`        | Ability test                                                              |
+| `live-test/ui/playwright.config.ts`          | Playwright project config (Phase 2)                                       |
+| `live-test/ui/fixtures.ts`                   | Global setup/teardown, reusing `adoClient.ts`/`manifest.ts` (Phase 2)     |
+| `live-test/ui/auth.ts`                       | Persistent-context login/session-expiry handling (Phase 2)                |
+| `live-test/ui/specs/renameTag.spec.ts`       | UI ability test (Phase 2)                                                 |
+| `live-test/ui/specs/mergeTags.spec.ts`       | UI ability test (Phase 2)                                                 |
+| `live-test/ui/specs/deleteTag.spec.ts`       | UI ability test (Phase 2)                                                 |
+| `live-test/ui/specs/searchAndFilter.spec.ts` | UI ability test (Phase 2)                                                 |
+| `live-test/ui/specs/alphaNav.spec.ts`        | UI ability test (Phase 2)                                                 |
+| `live-test/ui/specs/pagination.spec.ts`      | UI ability test (Phase 2)                                                 |
+| `.github/workflows/live-test.yml`            | CI workflow: manual dispatch, gated by the `live-test` GitHub Environment |
 
 ## Files to Modify
 
-| File | Changes |
-|---|---|
-| `package.json` | Add `live-test` and `live-test:ui` scripts; add `azure-devops-node-api`, `tsx`, and `@playwright/test` devDependencies |
-| `.gitignore` | Add `.live-test-runs/` (covers the run manifests/reports and the Playwright persistent profile) and the Playwright HTML report output dir |
-| `README.MD` | Replace the manual "Validate core scenarios" step in the Private Pre-Release Testing Workflow section with instructions to run `pnpm live-test` and `pnpm live-test:ui`; document the one-time `live-test` GitHub Environment setup for CI |
+| File           | Changes                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `package.json` | Add `live-test` and `live-test:ui` scripts; add `azure-devops-node-api`, `tsx`, and `@playwright/test` devDependencies                                                                                                                     |
+| `.gitignore`   | Add `.live-test-runs/` (covers the run manifests/reports and the Playwright persistent profile) and the Playwright HTML report output dir                                                                                                  |
+| `README.MD`    | Replace the manual "Validate core scenarios" step in the Private Pre-Release Testing Workflow section with instructions to run `pnpm live-test` and `pnpm live-test:ui`; document the one-time `live-test` GitHub Environment setup for CI |
 
 ## Out of Scope
 
