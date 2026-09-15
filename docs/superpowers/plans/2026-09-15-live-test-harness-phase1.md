@@ -3100,7 +3100,9 @@ describe("cleanupRun", () => {
     expect(await client.countWorkItemsWithTag("livetest-r1-x-a")).toBe(0);
     expect(client.tagNames()).not.toContain("livetest-r1-x-a");
     expect(store.manifest.status).toBe("cleaned");
-    expect(await client.getWorkItemTags([id])).toEqual([]);
+    // The work item is soft-deleted, so reading it back must fail the way the
+    // real batch API does (its default ErrorPolicy is Fail, not Omit).
+    await expect(client.getWorkItemTags([id])).rejects.toThrow(/404/);
   });
 
   it("keeps going when one delete fails and still marks the run cleaned", async () => {
