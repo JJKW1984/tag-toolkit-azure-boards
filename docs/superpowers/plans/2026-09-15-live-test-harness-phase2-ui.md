@@ -12,7 +12,29 @@
 
 ## Prerequisites
 
-1. **Phase 1 is complete and merged** — `docs/superpowers/plans/2026-09-15-live-test-harness-phase1.md`. This plan imports `AdoClient`, `ManifestStore`, `newRunId`, and `RUNS_DIR` from it.
+1. **Phase 1 is complete** on `feature/live-test-harness` — `docs/superpowers/plans/2026-09-15-live-test-harness-phase1.md`. This plan imports `AdoClient`, `ManifestStore`, `newRunId`, `testTag`, `cleanupRun`, and `RUNS_DIR` from it.
+
+   **Phase 1 changed in ways this plan predates — reconcile before executing Task 4 (seeding):**
+
+   - **`cleanupRun` now refuses to delete anything it cannot prove the harness created.** Tags must
+     carry the `livetest-` prefix; work items must carry a `[livetest-<runId>] ` title marker or a
+     live-test tag. The UI fixtures already use `testTag`-generated names, so tags are fine — but
+     `seed.ts` creates work items through `AdoClient.createWorkItem` **directly**, bypassing
+     `buildContext.createWorkItem`, which is what applies the title marker. As written, Task 4's
+     seeded work items would be **refused at teardown** and the run left `in-progress`. Fix when
+     executing: either seed through `buildContext`, or apply the same title marker in `seed.ts`.
+     This is the single most important reconciliation in this list.
+   - **Cleanup now reports failure.** `cleanupRun` marks a manifest `cleaned` only when nothing was
+     refused and every delete resolved. `globalTeardown` should check `store.manifest.status` and
+     fail loudly rather than assuming teardown worked.
+   - **`getWorkItemTags` throws for the whole batch** if any requested id is unknown or soft-deleted
+     (it mirrors the real batch API's default `Fail` error policy). Any fixture code reading back
+     ids it may have deleted must handle that per-id.
+   - **`WorkItemTags` gained a `title` field**, and `errors.ts` (`NotFoundError`, `isNotFound`) is
+     new. Both are available to Phase 2.
+   - **Jest's `live-test` project matches `**/*.test.ts` only**, so the Playwright `*.spec.ts` files
+     under `live-test/ui/specs/` are already excluded. No config change needed — verify rather than
+     re-derive.
 2. **The `-develop` extension is installed in the target org** via the existing manual workflow (`pnpm build && pnpm package:test`, then `tfx extension publish --manifest-globs vss-extension-dev.json`). This plan does not automate publishing.
 3. **A developer can sign in to that org interactively** in a browser on the machine running the tests.
 

@@ -10,6 +10,46 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-15-live-test-harness-design.md`
 
+## Status: complete
+
+All 17 tasks are implemented and reviewed on `feature/live-test-harness` — 30 commits, 286 unit
+tests (from a 105-test baseline), both typechecks clean. Each task got its own spec-and-quality
+review; a whole-branch review then found two Critical issues, and both were fixed.
+
+The task text below is the plan **as executed**: several tasks were amended mid-flight because a
+review found the plan itself wrong, and those amendments are folded in. The notable ones:
+
+| What changed | Why |
+|---|---|
+| `live-test/errors.ts` added (`NotFoundError`, `isNotFound`) | Cleanup must distinguish "already gone" from "unknown state"; sniffing `404` out of an error message was an undocumented coupling |
+| Cleanup scans for provenance before deleting anything | A stale or planted manifest would otherwise delete real project data and report success |
+| Work items prove provenance by a `[livetest-<runId>]` title marker | A tag-based check is unsound: the delete ability removes its own tag, so ~2 of 41 items hold no tag at cleanup time |
+| Partial cleanup stays `in-progress`; cleanup modes can exit non-zero | Marking a partially-failed run clean made every later sweep skip it, stranding resources |
+| Rename and merge poll their read-backs | They read back once while delete polled — the inconsistency would have produced flaky failures against a real org |
+| Analytics budget raised to 5 min / 10s | Analytics ingestion is minutes-scale; 30s was the most likely first-run failure |
+| Manifest flush is atomic (temp + rename) | `writeFileSync` truncates first, so a crash mid-flush lost the whole manifest — the exact case the file exists to prevent |
+| Argument-parse errors no longer echo parser text | A stray positional printed the PAT to stdout |
+| `sanitizeError` redacts `Basic <base64>` | Shared **production** code: it redacted the scheme and left the credential |
+| CI sweep is `if: always()`, actions SHA-pinned, `timeout-minutes: 20` | `failure()` skips cancellation and runner timeout — the cases most likely to strand data |
+
+### Open items
+
+- **Task 16 Step 8 — the first run against a real Azure DevOps organization — was never executed.**
+  No org or PAT was available. This is the one claim the unit tests cannot make; see the spec's
+  "First live run" section for where to aim it.
+- The final gate re-review of the last provenance fix (commit `20d78af`) did not finish — it was
+  cut off by a session limit. That commit's own tests pass and the change was self-reviewed, but it
+  has not had an independent read.
+- Two commits (`e89bd0a`, `fc15a6f`) carry a `Co-Authored-By` line that is not preceded by a blank
+  line, so git does not parse it as a trailer. Deliberately not rewritten — history rewriting is
+  the repository owner's call. A short interactive rebase fixes it while the branch is unmerged.
+- Deferred minors, all judged non-blocking by the whole-branch review: `ManifestStore.manifest`
+  returns its internal object by reference; the five Work Item Tracking methods don't wrap library
+  errors (every sink already sanitizes, so it is a consistency wart rather than a leak);
+  `renameTag.test.ts` uses a call-counter stub that mirrors the implementation's call sequence;
+  `@types/node` is `^20` while the runtime target is 24; `pnpm-lock.yaml` carries unrelated `libc`
+  metadata churn.
+
 ## Global Constraints
 
 - **Node 24 / pnpm 9** — matches `.github/workflows/build.yml`. Global `fetch` and `node:util` `parseArgs` are available; do not add an HTTP or arg-parsing dependency.
