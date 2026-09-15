@@ -32,6 +32,12 @@ export interface RunReport {
 export interface WorkItemTags {
   id: number;
   tags: string[];
+  /**
+   * System.Title, when the reader supplied it. Cleanup uses it to prove an id
+   * belongs to the harness before deleting it — see `testWorkItemTitle`.
+   * Optional so a test double asserting only on tags stays valid.
+   */
+  title?: string;
 }
 
 /**

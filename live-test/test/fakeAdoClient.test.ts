@@ -117,8 +117,8 @@ describe("FakeAdoClient queries", () => {
     const two = await c.createWorkItem("Task", "t", ["b"]);
 
     expect(await c.getWorkItemTags([one, two])).toEqual([
-      { id: one, tags: ["a"] },
-      { id: two, tags: ["b"] },
+      { id: one, tags: ["a"], title: "t" },
+      { id: two, tags: ["b"], title: "t" },
     ]);
   });
 

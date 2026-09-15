@@ -6,6 +6,7 @@ import { IAdoClient, WorkItemTags } from "../types";
 interface FakeWorkItem {
   id: number;
   tags: string[];
+  title: string;
   deleted: boolean;
 }
 
@@ -34,9 +35,11 @@ export class FakeAdoClient implements IAdoClient {
     this.failures.set(method, message);
   }
 
-  seedWorkItem(tags: string[]): number {
+  /** Seeds an item directly. The default empty title models a work item this
+   *  harness did not create — nothing stamps a live-test marker onto it. */
+  seedWorkItem(tags: string[], title = ""): number {
     const id = this.nextId++;
-    this.items.set(id, { id, tags: [...tags], deleted: false });
+    this.items.set(id, { id, tags: [...tags], title, deleted: false });
     for (const t of tags) this.registerTag(t);
     return id;
   }
@@ -106,9 +109,9 @@ export class FakeAdoClient implements IAdoClient {
     return this.live().filter((i) => i.tags.includes(tag)).length;
   }
 
-  async createWorkItem(_type: string, _title: string, tags: string[]): Promise<number> {
+  async createWorkItem(_type: string, title: string, tags: string[]): Promise<number> {
     this.maybeFail("createWorkItem");
-    return this.seedWorkItem(tags);
+    return this.seedWorkItem(tags, title);
   }
 
   async getWorkItemTags(ids: number[]): Promise<WorkItemTags[]> {
@@ -123,7 +126,7 @@ export class FakeAdoClient implements IAdoClient {
     }
     return ids.map((id) => {
       const item = this.items.get(id) as FakeWorkItem;
-      return { id: item.id, tags: [...item.tags] };
+      return { id: item.id, tags: [...item.tags], title: item.title };
     });
   }
 

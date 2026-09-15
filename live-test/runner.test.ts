@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { buildContext, cleanupRun, runAbilities } from "./runner";
 import { ManifestStore } from "./manifest";
 import { FakeAdoClient } from "./test/fakeAdoClient";
+import { ALL_ABILITIES } from "./abilities";
 import { Ability } from "./types";
 
 function newStore(): ManifestStore {
@@ -201,6 +202,91 @@ describe("cleanupRun", () => {
 });
 
 describe("cleanupRun — provenance", () => {
+  it("refuses to delete a work item id the harness did not create", async () => {
+    const client = new FakeAdoClient();
+    // A real production work item: no live-test marker in its title, no
+    // live-test tag. A manifest naming {"workItems":[id],"tags":[]} passes
+    // shape validation, so this check is the only thing between it and the
+    // recycle bin.
+    const production = client.seedWorkItem(["Bug"], "Customer cannot log in");
+    const store = newStore();
+    store.addWorkItem(production);
+
+    const lines: string[] = [];
+    await cleanupRun(client, store, (m) => lines.push(m));
+
+    expect(client.tagsOf(production)).toEqual(["Bug"]);
+    expect(lines.some((l) => l.includes(`REFUSING to delete work item ${production}`))).toBe(
+      true
+    );
+    expect(store.manifest.status).toBe("in-progress");
+  });
+
+  it("scans the whole manifest before deleting anything", async () => {
+    const client = new FakeAdoClient();
+    const production = client.seedWorkItem(["Bug"], "Customer cannot log in");
+    const store = newStore();
+    const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
+    const owned = await ctx.createWorkItem(["livetest-r1-x-a"]);
+    // The foreign id is recorded last, so a delete-as-you-go loop would already
+    // have destroyed the owned item before noticing the manifest is corrupt.
+    store.addWorkItem(production);
+
+    const lines: string[] = [];
+    await cleanupRun(client, store, (m) => lines.push(m));
+
+    const refusalAt = lines.findIndex((l) => l.includes("REFUSING"));
+    const deletionAt = lines.findIndex((l) => l.includes("Cleanup refused"));
+    expect(refusalAt).toBeGreaterThanOrEqual(0);
+    expect(deletionAt).toBeGreaterThan(refusalAt);
+    expect(client.tagsOf(production)).toEqual(["Bug"]);
+    // The harness's own item is still cleaned up.
+    expect(client.tagsOf(owned)).toEqual([]);
+  });
+
+  it("still deletes a work item whose tags were all cascaded off it", async () => {
+    const client = new FakeAdoClient();
+    const store = newStore();
+    const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
+    const id = await ctx.createWorkItem(["livetest-r1-delete-a"]);
+    // Exactly what the delete-tag ability leaves behind: deleting the tag is
+    // the assertion, and ADO cascades it off the work item. A tags-only
+    // ownership check would refuse this item on every green run and pin the
+    // manifest in-progress forever.
+    await client.deleteTag("livetest-r1-delete-a");
+    expect(client.tagsOf(id)).toEqual([]);
+
+    await cleanupRun(client, store, () => undefined);
+
+    expect(store.manifest.status).toBe("cleaned");
+    await expect(client.getWorkItemTags([id])).rejects.toThrow(/404/);
+  });
+
+  it("cleans up completely after a full green run of every real ability", async () => {
+    // End-to-end guard on the ownership predicate. A tags-only check passes
+    // every unit test above and still refuses 2 of the 41 work items here —
+    // the delete-tag ability's pair, whose tag it deleted as its assertion —
+    // which would leave every green run in-progress and exiting non-zero.
+    const client = new FakeAdoClient();
+    const store = newStore();
+    const results = await runAbilities({
+      client,
+      store,
+      runId: "r1",
+      workItemType: "Task",
+      abilities: ALL_ABILITIES,
+      log: () => undefined,
+    });
+    expect(results.every((r) => r.status === "pass")).toBe(true);
+
+    const lines: string[] = [];
+    await cleanupRun(client, store, (m) => lines.push(m));
+
+    expect(lines.some((l) => l.includes("REFUSING"))).toBe(false);
+    expect(store.manifest.status).toBe("cleaned");
+    expect(client.tagNames()).toEqual([]);
+  });
+
   it("refuses to delete a tag that is not a live-test tag", async () => {
     const client = new FakeAdoClient();
     client.seedWorkItem(["Bug"]);
@@ -214,6 +300,22 @@ describe("cleanupRun — provenance", () => {
 
     expect(client.tagNames()).toContain("Bug");
     expect(lines.some((l) => l.includes("REFUSING to delete tag"))).toBe(true);
+  });
+
+  it("does not log a refusal for an id that is simply already gone", async () => {
+    const client = new FakeAdoClient();
+    const store = newStore();
+    const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
+    const id = await ctx.createWorkItem(["livetest-r1-x-a"]);
+    await client.deleteWorkItem(id);
+
+    const lines: string[] = [];
+    await cleanupRun(client, store, (m) => lines.push(m));
+
+    // The provenance read 404s on an already-deleted item. That is the goal
+    // being met, not a refusal and not a failure.
+    expect(lines.some((l) => l.includes("REFUSING"))).toBe(false);
+    expect(store.manifest.status).toBe("cleaned");
   });
 
   it("does not mark a manifest naming a foreign tag as cleaned", async () => {

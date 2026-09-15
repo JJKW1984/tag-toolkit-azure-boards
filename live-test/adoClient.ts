@@ -174,13 +174,16 @@ export class AdoClient implements IAdoClient {
     const out: WorkItemTags[] = [];
     for (let i = 0; i < ids.length; i += 200) {
       const batch = await wit.getWorkItemsBatch(
-        { ids: ids.slice(i, i + 200), fields: ["System.Tags"] },
+        // System.Title comes back too: it is the only provenance signal that
+        // survives a tag being cascaded off an item, and cleanup needs it.
+        { ids: ids.slice(i, i + 200), fields: ["System.Tags", "System.Title"] },
         this.project
       );
       for (const item of batch ?? []) {
         out.push({
           id: item.id as number,
           tags: parseTags((item.fields?.["System.Tags"] as string) ?? ""),
+          title: (item.fields?.["System.Title"] as string) ?? "",
         });
       }
     }

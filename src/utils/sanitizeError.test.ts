@@ -70,10 +70,20 @@ describe("sanitizeError", () => {
     expect(result).not.toContain("am9zZXBoOnNlY3JldA");
   });
 
-  it("leaves the ordinary word Basic in prose alone", () => {
-    expect(sanitizeError(new Error("Basic auth is required"))).toBe(
-      "Basic auth is required"
-    );
+  it("redacts a bare basic credential regardless of case", () => {
+    const result = sanitizeError(new Error("sent basic am9zZXBoOnNlY3JldA== upstream"));
+    expect(result).not.toContain("am9zZXBoOnNlY3JldA");
+  });
+
+  it.each([
+    "Basic auth is required",
+    "Basic authentication is required",
+    "Basic settings were rejected",
+    "Basic operations completed",
+  ])("leaves the ordinary word Basic in prose alone: %s", (message) => {
+    // The value run has to be base64-*shaped*, not merely long — "Basic
+    // authentication is required" is a plausible real ADO/AAD message.
+    expect(sanitizeError(new Error(message))).toBe(message);
   });
 
   it("redacts token-like key/value pairs", () => {

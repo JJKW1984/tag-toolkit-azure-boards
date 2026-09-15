@@ -260,20 +260,22 @@ describe("work item operations", () => {
     );
   });
 
-  it("reads tags for a batch of work items", async () => {
+  it("reads tags and the title for a batch of work items", async () => {
     mockWit.getWorkItemsBatch.mockResolvedValue([
-      { id: 1, fields: { "System.Tags": "a; b" } },
+      { id: 1, fields: { "System.Tags": "a; b", "System.Title": "[livetest-r1] x" } },
       { id: 2, fields: {} },
     ]);
 
     const result = await newClient().getWorkItemTags([1, 2]);
 
     expect(result).toEqual([
-      { id: 1, tags: ["a", "b"] },
-      { id: 2, tags: [] },
+      { id: 1, tags: ["a", "b"], title: "[livetest-r1] x" },
+      { id: 2, tags: [], title: "" },
     ]);
+    // The title is what cleanup checks provenance against: it is the only
+    // signal that survives a tag being cascaded off an item.
     const [request, project] = mockWit.getWorkItemsBatch.mock.calls[0];
-    expect(request).toEqual({ ids: [1, 2], fields: ["System.Tags"] });
+    expect(request).toEqual({ ids: [1, 2], fields: ["System.Tags", "System.Title"] });
     expect(project).toBe("My Project");
   });
 
