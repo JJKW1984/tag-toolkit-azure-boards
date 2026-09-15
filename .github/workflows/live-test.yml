@@ -1,0 +1,68 @@
+name: Live Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      work_item_type:
+        description: Work item type to create for test data
+        required: false
+        default: Task
+
+permissions:
+  contents: read
+
+jobs:
+  live-test:
+    name: Run live test harness
+    runs-on: ubuntu-latest
+    # Secrets are exposed only after this environment's protection rules pass.
+    # That approval replaces the CLI's interactive confirmation, which has no
+    # terminal to run in here.
+    environment: live-test
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run live test harness
+        env:
+          AZDO_TEST_ORG_URL: ${{ vars.AZDO_TEST_ORG_URL }}
+          AZDO_TEST_PROJECT: ${{ vars.AZDO_TEST_PROJECT }}
+          AZDO_TEST_PAT: ${{ secrets.AZDO_TEST_PAT }}
+          # Passed via env, never interpolated into the script body: a `${{ }}`
+          # expression inside `run:` lets a crafted input execute as shell.
+          WORK_ITEM_TYPE: ${{ inputs.work_item_type }}
+        run: |
+          pnpm live-test \
+            --org "$AZDO_TEST_ORG_URL" \
+            --project "$AZDO_TEST_PROJECT" \
+            --pat "$AZDO_TEST_PAT" \
+            --work-item-type "$WORK_ITEM_TYPE" \
+            --yes
+
+      - name: Sweep up any data left by a failed run
+        if: failure()
+        env:
+          AZDO_TEST_PAT: ${{ secrets.AZDO_TEST_PAT }}
+        run: pnpm live-test --cleanup-all --pat "$AZDO_TEST_PAT"
+
+      - name: Upload run manifest and report
+        if: always()
+        # SHA-pinned to match build.yml's existing style — this workflow handles a PAT.
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f #v6.0.0
+        with:
+          name: live-test-run
+          path: .live-test-runs/
+          if-no-files-found: warn

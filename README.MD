@@ -125,6 +125,7 @@ When shipping updates, always bump `version`.
 - `pnpm test`: Run Jest tests
 - `pnpm test:watch`: Run Jest in watch mode
 - `pnpm test:coverage`: Run tests with coverage output
+- `pnpm live-test`: Run the live API test harness against a real org/project (see Live Testing)
 - `pnpm package`: Package production manifest (`vss-extension.json`)
 - `pnpm manifest:test`: Regenerate development manifest (`vss-extension-dev.json`)
 - `pnpm package:test`: Package development manifest (`vss-extension-dev.json`)
@@ -192,8 +193,48 @@ What this does:
 
 Recommended rollout:
 1. Publish private variant to a test organization/canary org.
-2. Validate core scenarios (merge, rename, delete, count, paging, alpha filter).
+2. Validate the server-backed scenarios automatically: `pnpm live-test --org <url> --project <project> --pat <pat>`
 3. Publish public extension only after private validation passes.
+
+## Live Testing
+
+The live test harness creates real work items and tags in a target project,
+exercises every server-backed ability of the extension, reports pass/fail per
+ability, and offers to delete everything it created.
+
+```bash
+pnpm live-test --org https://dev.azure.com/<org> --project <project> --pat <pat>
+```
+
+The PAT needs Work Items (Read & Write) and Analytics (Read).
+
+Flags:
+
+- `--yes` — skip the typed project-name confirmation and auto-clean afterwards
+- `--work-item-type <type>` — override the default `Task`
+- `--cleanup <manifest.json>` — delete everything recorded in one run manifest
+- `--cleanup-all` — delete everything in every manifest still marked in-progress
+
+Every run writes `.live-test-runs/<runId>.json` (a manifest of everything it
+created) and `.live-test-runs/<runId>-report.json`. If a run is interrupted, the
+manifest is what lets a later `--cleanup` remove the leftovers. Work items are
+soft-deleted to the project Recycle Bin, never destroyed.
+
+### Running it in CI
+
+`.github/workflows/live-test.yml` runs the harness on manual dispatch only. It
+targets the `live-test` GitHub Environment, which a repository admin must create
+once under **Settings → Environments** with:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `AZDO_TEST_PAT` | PAT with Work Items (Read & Write) + Analytics (Read) |
+| Variable | `AZDO_TEST_ORG_URL` | `https://dev.azure.com/<org>` |
+| Variable | `AZDO_TEST_PROJECT` | Scratch project name |
+
+Add **required reviewers** to that environment. The approval is what replaces
+the interactive confirmation prompt, which cannot run in a workflow — it is the
+only thing standing between a mistyped variable and churn in a real project.
 
 ## Continuous Integration Quality Gates
 
