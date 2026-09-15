@@ -12,6 +12,36 @@ This spec covers three parts:
 - **Phase 2 (UI-level):** Playwright automation against the actual installed `-develop` extension's UI, covering what Phase 1 structurally cannot — the real React components and the pure client-side behaviors (search, A-Z nav, pagination). Local-only, developer-run (see [Phase 2](#phase-2-playwright-ui-level-automation) for why it can't run unattended).
 - **CI integration:** a GitHub Actions workflow that runs Phase 1 (only) on manual dispatch, gated by a GitHub Environment.
 
+## Status
+
+**Phase 1 and CI integration are built** on `feature/live-test-harness` (30 commits, 286 unit tests,
+both typechecks clean). **Phase 2 (Playwright) is not started.**
+
+This document has been updated to describe what was actually built. Several things changed during
+implementation because review found the original design wrong; each is explained where it applies
+rather than listed here, but the load-bearing ones are: cleanup now scans for provenance before
+deleting anything, a 404 counts as a successful delete, partial cleanup never reports success,
+work items prove provenance by a title marker rather than a tag, rename and merge poll their
+read-backs, and the Analytics budget is five minutes rather than thirty seconds.
+
+**The one claim this spec cannot make: the harness has never been run against a real Azure DevOps
+organization.** Every guarantee here is currently backed by unit tests against an in-memory fake
+that models Azure DevOps' semantics. The fake was itself reviewed and corrected several times for
+fidelity, but it is still a model. Treat the first live run as the actual verification — see
+[First live run](#first-live-run) for where to aim it.
+
+## First live run
+
+Ranked by how likely each is to differ from the fake, with the symptom that identifies it:
+
+1. **Analytics ingestion lag.** `[FAIL] List tags + counts … Analytics count was 0 after 300000ms, expected 3`. Raise the budget before concluding anything else is broken.
+2. **PAT auth against `analytics.dev.azure.com`.** Azure DevOps characteristically answers bad auth with HTTP 203 and an HTML sign-in page rather than 401. The harness now detects that and says so; if you see it, the PAT or its scopes are wrong.
+3. **Whether the OData lambda filter is accepted at all.** `GET failed: 400 …` on the *first* probe rather than a timeout — that is what distinguishes this from #1.
+4. **Work item creation.** Fails every ability at once, which is how you will recognise it. Likely causes: a required field on a customized process, or no `Task` type on a Basic-process project (use `--work-item-type`).
+5. **Rename/cascade propagation delay.** Now polled, so it should surface as a clean timeout rather than a flake.
+6. **Tag-delete semantics for an already-gone tag**, which drives the not-found contract. Phantom tags are guaranteed on the first run, since rename and merge both record a tag before creating it.
+7. **Throttling (429).** ~41 sequential creates with no retry or backoff anywhere.
+
 ### Why API-level, not UI-level, for Phase 1
 
 `TagService` and `TagCountCacheService` are built on `azure-devops-extension-api`'s `getClient()` and `SDK.getAccessToken()`/`SDK.getHost()`/`SDK.getService()`, which require the extension to be running inside an ADO iframe host handshake (`SDK.init()`). They cannot run in a standalone Node process. Reusing that code directly for a live-test script is not possible without a production refactor larger than this task warrants, so the harness re-implements the same REST semantics against the live APIs instead of importing `TagService`.
@@ -42,12 +72,26 @@ runner.ts (normal run)
       → continue to next ability regardless of outcome
   → report.ts: print console summary, write JSON report
   → prompt: "Delete N test work items and M test tags? [y/N]" (auto-yes with --yes)
-  → on confirm: delete via adoClient.ts, mark manifest "cleaned"
+  → on confirm: cleanupRun (below)
   → on decline: leave manifest "in-progress", print its path for later --cleanup
 
-runner.ts (--cleanup <manifest>)
-  → read manifest, delete every recorded work item/tag, mark "cleaned"
+cleanupRun (from a normal run, --cleanup <manifest>, or --cleanup-all)
+  → SCAN the whole manifest first, deleting nothing:
+      - a tag qualifies if its name starts with `livetest-`
+      - a work item qualifies if its title carries the `[livetest-<runId>]` marker
+        or it still holds a live-test tag
+      - anything else is REFUSED, logged, and counted
+  → then delete only what qualified (work items soft-deleted to the Recycle Bin)
+  → a delete that 404s counts as success — the goal is "does not exist"
+  → mark "cleaned" ONLY when nothing was refused and nothing was left unresolved;
+    otherwise stay "in-progress" so a later sweep retries, and print the retry command
 ```
+
+Scan-before-delete and the provenance rules are the load-bearing part: `--cleanup <path>` accepts
+an arbitrary path and `--cleanup-all` sweeps a directory, so a stale, misplaced, hand-edited or
+planted manifest must not be able to make this tool delete real project data. Without the scan
+phase, a manifest identified as corrupt would already have been acted on by the time the refusal
+was logged.
 
 #### Why `azure-devops-node-api` + raw fetch, not `azure-devops-extension-api`
 
@@ -61,7 +105,11 @@ Sibling to `src/`, **not** included in the webpack bundle or the packaged `.vsix
 
 | File                             | Responsibility                                                                                                                       |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `cli.ts`                         | Flag parsing (`--org`, `--project`, `--pat`, `--yes`, `--cleanup`, `--work-item-type`), confirmation prompt, dispatch to `runner.ts` |
+| `cli.ts`                         | Flag parsing (`--org`, `--project`, `--pat`, `--yes`, `--cleanup`, `--cleanup-all`, `--work-item-type`), confirmation prompt, `main()`, dispatch to `runner.ts` |
+| `errors.ts`                      | `NotFoundError` + `isNotFound(e)` — the "already gone" contract cleanup depends on                                                   |
+| `naming.ts`                      | `LIVE_TEST_PREFIX`, `testTag(runId, ability, suffix)`, `newRunId(date)`                                                              |
+| `poll.ts`                        | `pollUntil` with an injectable clock, for Azure DevOps' eventually-consistent reads                                                 |
+| `types.ts`                       | Shared interfaces, incl. the `IAdoClient` seam the real client and the in-memory fake both implement                                 |
 | `adoClient.ts`                   | PAT-authenticated calls: Tags API CRUD, Analytics OData counts, WIT create/get/update/delete/WIQL (via `azure-devops-node-api`)      |
 | `manifest.ts`                    | Read/write `.live-test-runs/<runId>.json`; append-as-created semantics so a crash never loses track of what exists                   |
 | `report.ts`                      | Console table renderer (live per-ability line + summary) and JSON report writer                                                      |
@@ -102,6 +150,14 @@ Every ability owns a private tag namespace prefixed `livetest-<runId>-<ability>-
 2. Call the Tags API list — assert the tag is present.
 3. Call the Analytics OData counts endpoint (poll, see below) — assert count is exactly 3.
 
+**Known limitation, stated so a green result is not over-read.** The harness queries
+`$filter=Tags/any(t: t/TagName eq '<tag>')` and counts returned rows. Production's
+`TagCountCacheService.fetchCounts` instead uses `$filter=Tags/any()` with no tag predicate, pages
+the entire organization, aggregates client-side, and lowercases every tag name. The harness's shape
+was chosen because paging a whole org is far too slow for a test harness — but it means a passing
+"List tags + counts" proves Analytics knows the count; it does **not** exercise production's filter,
+its paging, or its case-folding.
+
 #### Ability: Rename
 1. Create 2 Tasks tagged `livetest-<run>-rename-old`.
 2. Rename via the Tags API to `livetest-<run>-rename-new`.
@@ -126,7 +182,20 @@ Every ability owns a private tag namespace prefixed `livetest-<runId>-<ability>-
 
 ### Eventual Consistency
 
-The Analytics OData endpoint lags behind OLTP writes by an unpredictable amount. Any assertion reading from Analytics (only the "list + counts" ability) uses a poll-with-timeout helper: retry every 2 seconds, up to 30 seconds total. A timeout is reported as a `fail` with the last observed value and elapsed time, not a hang or an exception.
+Azure DevOps is eventually consistent in more than one place, and the budgets differ by mechanism:
+
+| Read | Budget | Why |
+|---|---|---|
+| Analytics counts (list + counts) | 5 min, 10s interval | Analytics OData ingestion is commonly measured in minutes, not seconds — this is the slowest path and the most likely first-run failure |
+| Tag-delete cascade onto work items | 30s, 2s interval | A different mechanism inside the OLTP store; far faster than Analytics |
+| Rename propagation, merge read-backs | 30s, 2s interval | Structurally identical to the delete cascade, so they share its budget |
+
+A timeout is reported as a `fail` with the last observed value and elapsed time, never a hang.
+
+Rename and merge originally read back once, unpolled, while delete polled — an inconsistency that
+would have produced flaky rename/merge failures against a real org while delete passed. All three
+now poll, and every ability exposes a `runWithPollSettings` export so its tests can shrink the
+budget to milliseconds.
 
 ---
 
@@ -155,6 +224,24 @@ Every work item and tag is appended to this file **immediately after creation**,
 
 - **Work items:** soft-deleted (ADO Recycle Bin) rather than permanently destroyed — reversible, and ADO auto-purges the Recycle Bin after 30 days. Permanent destroy is out of scope for this design.
 - **Tags:** deleted via the Tags API, which cascades removal from any work item automatically (same mechanism `TagService.deleteTagById` relies on in production).
+- **Provenance is checked before anything is deleted** (see the architecture flow above). Cleanup acts only on resources it can show the harness created.
+- **A 404 counts as success.** "Delete" means "ensure this does not exist", so a not-found confirms the goal. This matters because the rename and merge abilities record a tag *before* creating it — a run that fails early leaves a phantom manifest entry that would otherwise pin the run in-progress forever. `errors.ts`'s `isNotFound` recognises all three shapes this codebase produces: our own `NotFoundError` from the raw-fetch paths, `azure-devops-node-api`'s numeric `statusCode`, and the in-memory fake.
+- **Partial cleanup never reports success.** The manifest is marked `cleaned` only when nothing was refused and every delete resolved; otherwise it stays `in-progress` so `--cleanup-all` retries it. Marking a partially-failed run clean would make every later sweep skip it, stranding real resources in the project with only a scrolled-past log line as evidence. Re-running is safe precisely because 404s are tolerated.
+
+#### How a work item proves its provenance
+
+Tags carry the `livetest-` prefix, so they check themselves. Work item ids do not, and the obvious
+fix — requiring the item to still hold a live-test tag — is unsound here: the delete-tag ability
+deletes its own tag as the thing it asserts, and ADO cascades that off the two work items it
+created. After a fully green run, 2 of ~41 work items hold no live-test tag at all. A tags-only
+check would refuse them on every green run, never mark the run clean, and make every successful
+run exit non-zero with the sweep retrying forever.
+
+So `buildContext` stamps every work item title with `[livetest-<runId>] `, and an id qualifies if
+its title carries that marker **or** it still holds a live-test tag. The title survives the very
+cascade that removes the tag. Note this means the harness writes a recognisable marker into
+`System.Title` on the target project — deliberate, and the thing to look for if you ever need to
+identify stragglers by hand.
 
 ---
 
@@ -195,8 +282,19 @@ Every work item and tag is appended to this file **immediately after creation**,
 
 - CLI flags only (`--org`, `--project`, `--pat`) — no `.env` fallback for this tool, so the operator must consciously pass a target every run rather than relying on a possibly-stale file.
 - Before creating anything, the harness prints the resolved org/project and requires the operator to type the project name to proceed (skippable with `--yes` for repeat/local use).
-- All test data lives under a `livetest-<runId>-` prefix, making anything the harness created trivially identifiable in the ADO UI even without the manifest.
-- `cli.ts` exits non-zero if any ability reports `fail`, and zero only if every ability passed — this is load-bearing for CI (below), which relies on the process exit code to determine job success.
+- All test data lives under a `livetest-<runId>-` prefix, and every work item title carries a `[livetest-<runId>]` marker, making anything the harness created trivially identifiable in the ADO UI even without the manifest.
+- **Cleanup refuses to touch anything it cannot prove it created**, and scans before it deletes.
+- **`ManifestStore.open` validates shape** rather than trusting `JSON.parse(...) as RunManifest` — a manifest is untrusted input, since `--cleanup` takes an arbitrary path.
+- **The PAT is never echoed.** Argument-parse failures print usage and a generic message rather than the parser's text, because that text can contain an argument value — a stray positional (e.g. omitting the `--pat` flag name) would otherwise print the credential into terminal scrollback. Every other string reaching a log line, a report, or a manifest goes through `sanitizeError`.
+- `cli.ts` exits non-zero if any ability reports `fail`, **or if cleanup did not complete**, and zero only when everything passed and the run is clean — this is load-bearing for CI (below). Cleanup modes return non-zero on an unreadable manifest, a refused resource, or an unresolved delete.
+
+#### A note on `sanitizeError`
+
+This is shared production code (`src/utils/sanitizeError.ts`), used by the shipped extension, not
+just the harness. Building the harness surfaced a real gap in it: the key-value rule stopped at the
+first whitespace, so `Authorization: Basic <base64>` had its scheme redacted and its credential
+left standing. It now redacts base64-shaped values after an optional scheme word, case-insensitively,
+while leaving ordinary prose like "Basic authentication is required" intact.
 
 ---
 
@@ -275,8 +373,12 @@ This approval step substitutes for the CLI's interactive "type the project name"
 
 1. Checkout, setup Node + pnpm, `pnpm install --frozen-lockfile`
 2. `pnpm live-test --org "$AZDO_TEST_ORG_URL" --project "$AZDO_TEST_PROJECT" --pat "$AZDO_TEST_PAT" --yes`
-3. `if: always()` — upload the run's JSON report and manifest (`.live-test-runs/*`) as workflow artifacts, so failures are inspectable without re-running
-4. `if: failure()` — re-run `pnpm live-test --cleanup .live-test-runs/<runId>.json` so a mid-run failure (network blip, one ability's assertion timing out) still cleans up test data, since there's no one to see an interactive prompt
+3. `if: always()` — sweep with `pnpm live-test --cleanup-all` so a run that died mid-way still has its test data removed, since there's no one to see an interactive prompt. **`always()`, not `failure()`**: a cancelled job or a runner timeout strands data just as surely as a failed assertion, and those paths skip `failure()`. The sweep is a no-op when nothing is in-progress.
+4. `if: always()` — upload the run's JSON report and manifest (`.live-test-runs/*`) as workflow artifacts, so failures are inspectable without re-running. **Ordered after the sweep**, so the uploaded manifest shows the true post-cleanup state rather than a stale pre-cleanup one — that is how a human learns whether manual cleanup is still needed.
+
+The job sets `timeout-minutes: 20` and every action is SHA-pinned with a version comment, because
+this workflow handles a PAT and neither `fetch` nor the Azure DevOps client sets a request timeout —
+a hung call would otherwise ride the six-hour default with the credential live.
 
 ### Exit codes
 
@@ -288,9 +390,14 @@ Relies on the `cli.ts` exit-code contract noted under [Safety](#safety): non-zer
 
 | File                                         | Purpose                                                                   |
 | -------------------------------------------- | ------------------------------------------------------------------------- |
-| `live-test/cli.ts`                           | Entry point, flag parsing, confirmation                                   |
+| `live-test/cli.ts`                           | Entry point, flag parsing, confirmation, `main()`                         |
 | `live-test/adoClient.ts`                     | PAT-authenticated REST calls                                              |
-| `live-test/manifest.ts`                      | Run manifest read/write                                                   |
+| `live-test/errors.ts`                        | `NotFoundError` + `isNotFound` — the already-gone contract                |
+| `live-test/naming.ts`                        | Tag prefix, run ids, scoped tag names                                     |
+| `live-test/poll.ts`                          | Poll-with-timeout, injectable clock                                       |
+| `live-test/types.ts`                         | Shared interfaces incl. the `IAdoClient` seam                             |
+| `live-test/test/fakeAdoClient.ts`            | In-memory Azure DevOps fake the abilities are unit-tested against         |
+| `live-test/manifest.ts`                      | Run manifest read/write + shape validation                                |
 | `live-test/report.ts`                        | Console + JSON reporting                                                  |
 | `live-test/runner.ts`                        | Orchestration                                                             |
 | `live-test/abilities/listTagsAndCounts.ts`   | Ability test                                                              |
