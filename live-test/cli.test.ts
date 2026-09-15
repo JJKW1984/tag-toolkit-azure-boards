@@ -99,3 +99,55 @@ describe("confirmationMatches", () => {
     expect(confirmationMatches("", "My Project")).toBe(false);
   });
 });
+
+// --- appended to live-test/cli.test.ts ---
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { main } from "./cli";
+import { ManifestStore } from "./manifest";
+
+describe("main — confirmation gate", () => {
+  it("aborts with a non-zero code when the typed project name does not match", async () => {
+    const log: string[] = [];
+    const code = await main(
+      ["--org", "https://dev.azure.com/o", "--project", "P", "--pat", "x"],
+      { log: (m) => log.push(m), ask: async () => "wrong", now: () => new Date() }
+    );
+
+    expect(code).toBe(1);
+    expect(log.join("\n")).toContain("Aborted");
+  });
+
+  it("prints usage and returns 2 for a bad invocation", async () => {
+    const log: string[] = [];
+    const code = await main(["--pat", "x"], {
+      log: (m) => log.push(m),
+      ask: async () => "",
+      now: () => new Date(),
+    });
+
+    expect(code).toBe(2);
+    expect(log.join("\n")).toContain("Usage:");
+  });
+});
+
+describe("main — cleanup mode", () => {
+  it("returns 0 and marks a manifest cleaned when there is nothing to delete", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "live-test-main-"));
+    const store = ManifestStore.create(dir, {
+      runId: "r1",
+      org: "https://dev.azure.com/o",
+      project: "P",
+    });
+
+    const code = await main(["--cleanup", store.path, "--pat", "x"], {
+      log: () => undefined,
+      ask: async () => "",
+      now: () => new Date(),
+    });
+
+    expect(code).toBe(0);
+    expect(ManifestStore.open(store.path).manifest.status).toBe("cleaned");
+  });
+});

@@ -8,6 +8,7 @@
     "manifest:test": "node scripts/create-manifest-variant.cjs test",
     "package:test": "pnpm run manifest:test && tfx extension create --manifest-globs vss-extension-dev.json",
     "test": "jest --runInBand",
+    "live-test": "tsx live-test/cli.ts",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

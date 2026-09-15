@@ -1,4 +1,11 @@
 import { parseArgs } from "node:util";
+import * as readline from "node:readline/promises";
+import { AdoClient } from "./adoClient";
+import { ALL_ABILITIES } from "./abilities";
+import { ManifestStore, listManifestPaths, RUNS_DIR } from "./manifest";
+import { newRunId } from "./naming";
+import { allPassed, buildReport, formatSummary, writeReport } from "./report";
+import { cleanupRun, runAbilities } from "./runner";
 import { CliOptions } from "./types";
 
 export class CliError extends Error {}
@@ -65,4 +72,124 @@ export function parseCliArgs(argv: string[]): CliOptions {
 /** The typed-confirmation guard: an exact, deliberate match of the project name. */
 export function confirmationMatches(input: string, project: string): boolean {
   return input.trim() === project;
+}
+
+export interface MainIo {
+  log: (message: string) => void;
+  ask: (question: string) => Promise<string>;
+  now: () => Date;
+}
+
+const defaultIo: MainIo = {
+  log: (m) => console.log(m),
+  ask: async (question) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      return await rl.question(question);
+    } finally {
+      rl.close();
+    }
+  },
+  now: () => new Date(),
+};
+
+export async function main(argv: string[], io: MainIo = defaultIo): Promise<number> {
+  let opts;
+  try {
+    opts = parseCliArgs(argv);
+  } catch (e) {
+    io.log(e instanceof CliError ? e.message : String(e));
+    return 2;
+  }
+
+  if (opts.mode === "cleanup" || opts.mode === "cleanup-all") {
+    const paths =
+      opts.mode === "cleanup"
+        ? [opts.manifestPath as string]
+        : listManifestPaths(RUNS_DIR).filter(
+            (p) => ManifestStore.open(p).manifest.status === "in-progress"
+          );
+
+    for (const manifestPath of paths) {
+      const store = ManifestStore.open(manifestPath);
+      io.log(`Cleaning ${manifestPath} (${store.manifest.project})`);
+      const client = new AdoClient({
+        orgUrl: store.manifest.org,
+        project: store.manifest.project,
+        pat: opts.pat,
+      });
+      await cleanupRun(client, store, io.log);
+    }
+    if (paths.length === 0) io.log("Nothing to clean up.");
+    return 0;
+  }
+
+  const org = opts.org as string;
+  const project = opts.project as string;
+
+  io.log(`Live Test Harness\nOrg:      ${org}\nProject:  ${project}\n`);
+  io.log("This will create work items and tags in the above project, modify them, and delete them.\n");
+
+  if (!opts.yes) {
+    const answer = await io.ask(`Type the project name to continue: `);
+    if (!confirmationMatches(answer, project)) {
+      io.log("Aborted — the name entered did not match the target project.");
+      return 1;
+    }
+  }
+
+  const startedAt = io.now();
+  const runId = newRunId(startedAt);
+  const client = new AdoClient({ orgUrl: org, project, pat: opts.pat });
+  const store = ManifestStore.create(RUNS_DIR, { runId, org, project });
+  io.log(`Run ${runId} — manifest: ${store.path}\n`);
+
+  const results = await runAbilities({
+    client,
+    store,
+    runId,
+    workItemType: opts.workItemType,
+    abilities: ALL_ABILITIES,
+    log: io.log,
+  });
+
+  const report = buildReport(
+    {
+      runId,
+      org,
+      project,
+      startedAt: startedAt.toISOString(),
+      finishedAt: io.now().toISOString(),
+    },
+    results
+  );
+  const written = writeReport(RUNS_DIR, report);
+  io.log(`\n${formatSummary(results, written)}`);
+
+  const shouldClean =
+    opts.yes ||
+    confirmYes(
+      await io.ask(
+        `\nDelete ${store.manifest.workItems.length} test work items and ${store.manifest.tags.length} test tags? [y/N] `
+      )
+    );
+
+  if (shouldClean) {
+    await cleanupRun(client, store, io.log);
+  } else {
+    io.log(`\nLeft in place. Clean up later with:\n  pnpm live-test --cleanup ${store.path} --pat <pat>`);
+  }
+
+  return allPassed(results) ? 0 : 1;
+}
+
+function confirmYes(answer: string): boolean {
+  return /^y(es)?$/i.test(answer.trim());
+}
+
+// Entry point when run via `tsx live-test/cli.ts`.
+if (require.main === module) {
+  void main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
 }
