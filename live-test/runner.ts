@@ -1,5 +1,6 @@
 // live-test/runner.ts
 import { sanitizeError } from "../src/utils/sanitizeError";
+import { isNotFound } from "./errors";
 import { ManifestStore } from "./manifest";
 import { formatResultLine } from "./report";
 import { Ability, AbilityContext, AbilityResult, IAdoClient } from "./types";
@@ -64,6 +65,12 @@ export async function runAbilities(deps: RunDeps): Promise<AbilityResult[]> {
  * Best-effort teardown: every work item is soft-deleted and every tag removed.
  * Individual failures are logged and skipped — a 404 on something already gone
  * must not strand the rest of the run's data.
+ *
+ * The manifest is marked "cleaned" only when every delete succeeded. A run that
+ * failed a delete stays "in-progress" so `--cleanup-all` picks it up again;
+ * marking it cleaned would make later sweeps skip it and strand the surviving
+ * resource in the live project. Re-running cleanup is safe because deleting
+ * something already gone is tolerated.
  */
 export async function cleanupRun(
   client: IAdoClient,
@@ -72,11 +79,15 @@ export async function cleanupRun(
 ): Promise<void> {
   const { workItems, tags } = store.manifest;
   log(`Cleaning up ${workItems.length} work items and ${tags.length} tags…`);
+  let unresolved = 0;
 
   for (const id of workItems) {
     try {
       await client.deleteWorkItem(id);
     } catch (e) {
+      // Already gone is the outcome we wanted; anything else may still be alive.
+      if (isNotFound(e)) continue;
+      unresolved += 1;
       log(`  could not delete work item ${id}: ${sanitizeError(e)}`);
     }
   }
@@ -85,8 +96,18 @@ export async function cleanupRun(
     try {
       await client.deleteTag(tag);
     } catch (e) {
+      if (isNotFound(e)) continue;
+      unresolved += 1;
       log(`  could not delete tag ${tag}: ${sanitizeError(e)}`);
     }
+  }
+
+  if (unresolved > 0) {
+    log(
+      `Cleanup incomplete: ${unresolved} deletion(s) failed. Run left in-progress — ` +
+        `retry with: pnpm live-test --cleanup ${store.path} --pat <pat>`
+    );
+    return;
   }
 
   store.markCleaned();

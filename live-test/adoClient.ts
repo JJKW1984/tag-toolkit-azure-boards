@@ -4,6 +4,7 @@ import { IWorkItemTrackingApi } from "azure-devops-node-api/WorkItemTrackingApi"
 import { TagItem } from "../src/types";
 import { sanitizeError } from "../src/utils/sanitizeError";
 import { joinTags, parseTags } from "../src/utils/tagString";
+import { NotFoundError } from "./errors";
 import { IAdoClient, WorkItemTags } from "./types";
 
 export interface AdoClientOptions {
@@ -59,7 +60,9 @@ export class AdoClient implements IAdoClient {
 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
-      throw new Error(sanitizeError(`${method} failed: ${res.status} ${text}`));
+      const message = sanitizeError(`${method} failed: ${res.status} ${text}`);
+      if (res.status === 404) throw new NotFoundError(message);
+      throw new Error(message);
     }
 
     if (res.status === 204) return undefined;

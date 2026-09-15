@@ -145,7 +145,7 @@ describe("cleanupRun", () => {
     await expect(client.getWorkItemTags([id])).rejects.toThrow(/404/);
   });
 
-  it("keeps going when one delete fails and still marks the run cleaned", async () => {
+  it("keeps going when one delete fails but leaves the run in-progress for a retry", async () => {
     const client = new FakeAdoClient();
     const store = newStore();
     const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
@@ -156,16 +156,33 @@ describe("cleanupRun", () => {
     const lines: string[] = [];
     await cleanupRun(client, store, (m) => lines.push(m));
 
-    expect(store.manifest.status).toBe("cleaned");
+    // Marking a partially-failed run "cleaned" would make --cleanup-all skip it
+    // forever, stranding the surviving resource in the live project.
+    expect(store.manifest.status).toBe("in-progress");
     expect(lines.some((l) => l.includes("transient 500"))).toBe(true);
   });
 
-  it("tolerates a tag that is already gone", async () => {
+  it("treats an already-gone tag as cleaned, not as a failure", async () => {
     const client = new FakeAdoClient();
     const store = newStore();
+    // The rename and merge abilities record a tag before creating it, so a run
+    // that fails early leaves a phantom entry here. A 404 on it means the goal
+    // is already met — counting it as a failure would pin the run in-progress
+    // forever and every future sweep would retry something that cannot exist.
     store.addTag("never-created");
 
     await expect(cleanupRun(client, store, () => undefined)).resolves.toBeUndefined();
     expect(store.manifest.status).toBe("cleaned");
+  });
+
+  it("does not log a scary line for an already-gone tag", async () => {
+    const client = new FakeAdoClient();
+    const store = newStore();
+    store.addTag("never-created");
+
+    const lines: string[] = [];
+    await cleanupRun(client, store, (m) => lines.push(m));
+
+    expect(lines.some((l) => l.includes("could not delete"))).toBe(false);
   });
 });

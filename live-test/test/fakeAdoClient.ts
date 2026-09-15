@@ -1,5 +1,6 @@
 // live-test/test/fakeAdoClient.ts
 import { TagItem } from "../../src/types";
+import { NotFoundError } from "../errors";
 import { IAdoClient, WorkItemTags } from "../types";
 
 interface FakeWorkItem {
@@ -68,7 +69,7 @@ export class FakeAdoClient implements IAdoClient {
   async renameTag(tagId: string, newName: string): Promise<TagItem> {
     this.maybeFail("renameTag");
     const current = this.tags.get(tagId);
-    if (!current) throw new Error(`404 no tag ${tagId}`);
+    if (!current) throw new NotFoundError(`404 no tag ${tagId}`);
     // Deliberately not emulating a merge-on-collision: real ADO's behavior when
     // renaming onto an existing tag name is unverified, and a guessed emulation
     // would be worse than a loud refusal. Refuse instead of creating two
@@ -92,7 +93,7 @@ export class FakeAdoClient implements IAdoClient {
     if (!id) {
       id = [...this.tags.entries()].find(([, name]) => name === tagIdOrName)?.[0];
     }
-    if (!id) throw new Error(`404 no tag ${tagIdOrName}`);
+    if (!id) throw new NotFoundError(`404 no tag ${tagIdOrName}`);
     const name = this.tags.get(id) as string;
     this.tags.delete(id);
     for (const item of this.items.values()) {
@@ -118,7 +119,7 @@ export class FakeAdoClient implements IAdoClient {
     // it does not silently return a shorter array.
     for (const id of ids) {
       const item = this.items.get(id);
-      if (!item || item.deleted) throw new Error(`404 no work item ${id}`);
+      if (!item || item.deleted) throw new NotFoundError(`404 no work item ${id}`);
     }
     return ids.map((id) => {
       const item = this.items.get(id) as FakeWorkItem;
@@ -129,7 +130,7 @@ export class FakeAdoClient implements IAdoClient {
   async setWorkItemTags(id: number, tags: string[]): Promise<void> {
     this.maybeFail("setWorkItemTags");
     const item = this.items.get(id);
-    if (!item || item.deleted) throw new Error(`404 no work item ${id}`);
+    if (!item || item.deleted) throw new NotFoundError(`404 no work item ${id}`);
     item.tags = [...tags];
     for (const t of tags) this.registerTag(t);
   }
@@ -137,7 +138,7 @@ export class FakeAdoClient implements IAdoClient {
   async deleteWorkItem(id: number): Promise<void> {
     this.maybeFail("deleteWorkItem");
     const item = this.items.get(id);
-    if (!item) throw new Error(`404 no work item ${id}`);
+    if (!item) throw new NotFoundError(`404 no work item ${id}`);
     item.deleted = true;
   }
 
