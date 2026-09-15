@@ -87,16 +87,26 @@ export class AdoClient {
    * single tag lookup does not page through every tagged item in the org.
    */
   async countWorkItemsWithTag(tag: string): Promise<number> {
+    // Only the tag value is arbitrary data; the rest of the query is a
+    // literal OData skeleton. Encoding the whole composed string with
+    // encodeURI (which deliberately leaves & # $ = ( ) ' : untouched) would
+    // let a tag containing & or # forge a query-string boundary or get
+    // split off into a URL fragment. Encode just the value instead.
     const escaped = tag.replace(/'/g, "''");
     const query =
       `$select=WorkItemId&$expand=Tags($select=TagName)` +
-      `&$filter=Tags/any(t: t/TagName eq '${escaped}')`;
+      `&$filter=Tags/any(t: t/TagName eq '${encodeURIComponent(escaped)}')`;
     let url: string | null =
       `https://analytics.dev.azure.com/${encodeURIComponent(this.orgName)}` +
-      `/_odata/v4.0-preview/WorkItems?${encodeURI(query)}`;
+      `/_odata/v4.0-preview/WorkItems?${query}`;
 
     let total = 0;
     while (url) {
+      // Explicit annotation required: without it, tsc reports TS7022
+      // ("'page' implicitly has type 'any' ... referenced ... in its own
+      // initializer") because `url` is reassigned from `page` later in this
+      // same loop body, and strict-mode control-flow analysis can't resolve
+      // page's type without it being stated up front.
       const page: { value?: unknown[]; "@odata.nextLink"?: string } | undefined =
         await this.request<{
           value?: unknown[];

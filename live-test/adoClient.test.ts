@@ -143,4 +143,18 @@ describe("countWorkItemsWithTag", () => {
 
     expect(decodeURIComponent(fetchMock.mock.calls[0][0] as string)).toContain("'it''s'");
   });
+
+  it("percent-encodes & and # in the tag so they cannot forge a query boundary or URL fragment", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ value: [] }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await newClient().countWorkItemsWithTag("A&B#C");
+
+    const [rawUrl] = fetchMock.mock.calls[0];
+    const parsed = new URL(rawUrl as string);
+    expect(parsed.hash).toBe("");
+    expect(decodeURIComponent(parsed.search)).toContain(
+      "$filter=Tags/any(t: t/TagName eq 'A&B#C')"
+    );
+  });
 });
