@@ -6,6 +6,7 @@ import { ManifestStore, listManifestPaths, RUNS_DIR } from "./manifest";
 import { newRunId } from "./naming";
 import { allPassed, buildReport, formatSummary, writeReport } from "./report";
 import { cleanupRun, runAbilities } from "./runner";
+import { sanitizeError } from "../src/utils/sanitizeError";
 import { CliOptions } from "./types";
 
 export class CliError extends Error {}
@@ -103,25 +104,57 @@ export async function main(argv: string[], io: MainIo = defaultIo): Promise<numb
   }
 
   if (opts.mode === "cleanup" || opts.mode === "cleanup-all") {
-    const paths =
-      opts.mode === "cleanup"
-        ? [opts.manifestPath as string]
-        : listManifestPaths(RUNS_DIR).filter(
-            (p) => ManifestStore.open(p).manifest.status === "in-progress"
-          );
+    const stores: ManifestStore[] = [];
+    let failed = 0;
 
-    for (const manifestPath of paths) {
-      const store = ManifestStore.open(manifestPath);
-      io.log(`Cleaning ${manifestPath} (${store.manifest.project})`);
-      const client = new AdoClient({
-        orgUrl: store.manifest.org,
-        project: store.manifest.project,
-        pat: opts.pat,
-      });
-      await cleanupRun(client, store, io.log);
+    if (opts.mode === "cleanup") {
+      try {
+        stores.push(ManifestStore.open(opts.manifestPath as string));
+      } catch (e) {
+        io.log(`Could not read ${opts.manifestPath}: ${sanitizeError(e)}`);
+        return 1;
+      }
+    } else {
+      // One unreadable file must not abort the sweep: the other in-progress
+      // runs still have real resources waiting to be deleted.
+      for (const p of listManifestPaths(RUNS_DIR)) {
+        try {
+          const store = ManifestStore.open(p);
+          if (store.manifest.status === "in-progress") stores.push(store);
+        } catch (e) {
+          failed += 1;
+          io.log(`Skipping unreadable manifest ${p}: ${sanitizeError(e)}`);
+        }
+      }
     }
-    if (paths.length === 0) io.log("Nothing to clean up.");
-    return 0;
+
+    if (stores.length === 0 && failed === 0) {
+      io.log("Nothing to clean up.");
+      return 0;
+    }
+
+    for (const store of stores) {
+      io.log(`Cleaning ${store.path} (${store.manifest.project})`);
+      try {
+        const client = new AdoClient({
+          orgUrl: store.manifest.org,
+          project: store.manifest.project,
+          pat: opts.pat,
+        });
+        await cleanupRun(client, store, io.log);
+      } catch (e) {
+        failed += 1;
+        io.log(`  cleanup failed for ${store.path}: ${sanitizeError(e)}`);
+        continue;
+      }
+      // cleanupRun marks a manifest cleaned only when every delete resolved,
+      // so this is the signal that resources may still be alive.
+      if (store.manifest.status !== "cleaned") failed += 1;
+    }
+
+    // CI sweeps this; reporting success while resources survive would hide
+    // exactly the failure the sweep exists to catch.
+    return failed > 0 ? 1 : 0;
   }
 
   const org = opts.org as string;
@@ -189,7 +222,14 @@ function confirmYes(answer: string): boolean {
 
 // Entry point when run via `tsx live-test/cli.ts`.
 if (require.main === module) {
-  void main(process.argv.slice(2)).then((code) => {
-    process.exitCode = code;
-  });
+  void main(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((e) => {
+      // A throw that escapes main() must still exit cleanly with a readable
+      // message rather than an unhandled-rejection stack trace.
+      console.error(sanitizeError(e));
+      process.exitCode = 1;
+    });
 }

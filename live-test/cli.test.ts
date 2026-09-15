@@ -150,4 +150,39 @@ describe("main — cleanup mode", () => {
     expect(code).toBe(0);
     expect(ManifestStore.open(store.path).manifest.status).toBe("cleaned");
   });
+
+  it("returns 1 and says so when the manifest cannot be read", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "live-test-main-"));
+    const corrupt = path.join(dir, "corrupt.json");
+    fs.writeFileSync(corrupt, "{ not json", "utf8");
+
+    const log: string[] = [];
+    const code = await main(["--cleanup", corrupt, "--pat", "x"], {
+      log: (m) => log.push(m),
+      ask: async () => "",
+      now: () => new Date(),
+    });
+
+    expect(code).toBe(1);
+    expect(log.join("\n")).toContain("Could not read");
+  });
+
+  it("returns 1 when a manifest's org URL cannot be used", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "live-test-main-"));
+    const store = ManifestStore.create(dir, {
+      runId: "r2",
+      org: "not-an-azure-devops-url",
+      project: "P",
+    });
+
+    const log: string[] = [];
+    const code = await main(["--cleanup", store.path, "--pat", "x"], {
+      log: (m) => log.push(m),
+      ask: async () => "",
+      now: () => new Date(),
+    });
+
+    expect(code).toBe(1);
+    expect(log.join("\n")).toContain("cleanup failed");
+  });
 });
