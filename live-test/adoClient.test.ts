@@ -158,3 +158,111 @@ describe("countWorkItemsWithTag", () => {
     );
   });
 });
+
+const mockWit = {
+  createWorkItem: jest.fn(),
+  getWorkItemsBatch: jest.fn(),
+  updateWorkItem: jest.fn(),
+  deleteWorkItem: jest.fn(),
+  queryByWiql: jest.fn(),
+};
+
+jest.mock("azure-devops-node-api", () => ({
+  getPersonalAccessTokenHandler: jest.fn(() => ({})),
+  WebApi: jest.fn().mockImplementation(() => ({
+    getWorkItemTrackingApi: async () => mockWit,
+  })),
+}));
+
+describe("work item operations", () => {
+  beforeEach(() => {
+    Object.values(mockWit).forEach((fn) => fn.mockReset());
+  });
+
+  it("creates a work item with a title and joined tags, returning its id", async () => {
+    mockWit.createWorkItem.mockResolvedValue({ id: 101 });
+
+    const id = await newClient().createWorkItem("Task", "live test", ["a", "b"]);
+
+    expect(id).toBe(101);
+    const [, patch, project, type] = mockWit.createWorkItem.mock.calls[0];
+    expect(project).toBe("My Project");
+    expect(type).toBe("Task");
+    expect(patch).toEqual([
+      { op: "add", path: "/fields/System.Title", value: "live test" },
+      { op: "add", path: "/fields/System.Tags", value: "a; b" },
+    ]);
+  });
+
+  it("throws when the API returns a work item without an id", async () => {
+    mockWit.createWorkItem.mockResolvedValue({});
+    await expect(newClient().createWorkItem("Task", "t", [])).rejects.toThrow(
+      /did not return an id/
+    );
+  });
+
+  it("reads tags for a batch of work items", async () => {
+    mockWit.getWorkItemsBatch.mockResolvedValue([
+      { id: 1, fields: { "System.Tags": "a; b" } },
+      { id: 2, fields: {} },
+    ]);
+
+    const result = await newClient().getWorkItemTags([1, 2]);
+
+    expect(result).toEqual([
+      { id: 1, tags: ["a", "b"] },
+      { id: 2, tags: [] },
+    ]);
+    const [request, project] = mockWit.getWorkItemsBatch.mock.calls[0];
+    expect(request).toEqual({ ids: [1, 2], fields: ["System.Tags"] });
+    expect(project).toBe("My Project");
+  });
+
+  it("returns an empty array without calling the API for an empty id list", async () => {
+    expect(await newClient().getWorkItemTags([])).toEqual([]);
+    expect(mockWit.getWorkItemsBatch).not.toHaveBeenCalled();
+  });
+
+  it("chunks batch reads at 200 ids", async () => {
+    mockWit.getWorkItemsBatch.mockResolvedValue([]);
+    await newClient().getWorkItemTags(Array.from({ length: 250 }, (_, i) => i + 1));
+    expect(mockWit.getWorkItemsBatch).toHaveBeenCalledTimes(2);
+    expect(mockWit.getWorkItemsBatch.mock.calls[0][0].ids).toHaveLength(200);
+    expect(mockWit.getWorkItemsBatch.mock.calls[1][0].ids).toHaveLength(50);
+  });
+
+  it("writes tags back as a joined string", async () => {
+    mockWit.updateWorkItem.mockResolvedValue({});
+
+    await newClient().setWorkItemTags(7, ["a", "b"]);
+
+    const [, patch, id, project] = mockWit.updateWorkItem.mock.calls[0];
+    expect(patch).toEqual([
+      { op: "add", path: "/fields/System.Tags", value: "a; b" },
+    ]);
+    expect(id).toBe(7);
+    expect(project).toBe("My Project");
+  });
+
+  it("soft-deletes a work item", async () => {
+    mockWit.deleteWorkItem.mockResolvedValue({});
+    await newClient().deleteWorkItem(7);
+    expect(mockWit.deleteWorkItem).toHaveBeenCalledWith(7, "My Project");
+  });
+
+  it("queries work item ids by tag with an escaped WIQL literal", async () => {
+    mockWit.queryByWiql.mockResolvedValue({ workItems: [{ id: 3 }, { id: 4 }] });
+
+    const ids = await newClient().queryWorkItemIdsByTag("it's");
+
+    expect(ids).toEqual([3, 4]);
+    const [wiql, teamContext] = mockWit.queryByWiql.mock.calls[0];
+    expect(wiql.query).toContain("'it''s'");
+    expect(teamContext).toEqual({ project: "My Project" });
+  });
+
+  it("returns an empty array when the query matches nothing", async () => {
+    mockWit.queryByWiql.mockResolvedValue({});
+    expect(await newClient().queryWorkItemIdsByTag("x")).toEqual([]);
+  });
+});

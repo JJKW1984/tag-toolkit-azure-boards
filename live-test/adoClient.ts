@@ -1,6 +1,10 @@
 // live-test/adoClient.ts
+import * as azdev from "azure-devops-node-api";
+import { IWorkItemTrackingApi } from "azure-devops-node-api/WorkItemTrackingApi";
 import { TagItem } from "../src/types";
 import { sanitizeError } from "../src/utils/sanitizeError";
+import { joinTags, parseTags } from "../src/utils/tagString";
+import { IAdoClient, WorkItemTags } from "./types";
 
 export interface AdoClientOptions {
   /** Full org URL, e.g. https://dev.azure.com/myorg */
@@ -20,17 +24,23 @@ export function orgNameFromUrl(orgUrl: string): string {
   return match[1];
 }
 
-export class AdoClient {
+export class AdoClient implements IAdoClient {
   private readonly orgUrl: string;
   private readonly orgName: string;
   private readonly project: string;
   private readonly authHeader: string;
+  private readonly connection: azdev.WebApi;
+  private witApi?: IWorkItemTrackingApi;
 
   constructor(opts: AdoClientOptions) {
     this.orgUrl = opts.orgUrl.trim().replace(/\/$/, "");
     this.orgName = orgNameFromUrl(opts.orgUrl);
     this.project = opts.project;
     this.authHeader = `Basic ${Buffer.from(`:${opts.pat}`).toString("base64")}`;
+    this.connection = new azdev.WebApi(
+      this.orgUrl,
+      azdev.getPersonalAccessTokenHandler(opts.pat)
+    );
   }
 
   private async request<T>(
@@ -116,5 +126,75 @@ export class AdoClient {
       url = page?.["@odata.nextLink"] ?? null;
     }
     return total;
+  }
+
+  private async wit(): Promise<IWorkItemTrackingApi> {
+    if (!this.witApi) {
+      this.witApi = await this.connection.getWorkItemTrackingApi();
+    }
+    return this.witApi;
+  }
+
+  async createWorkItem(type: string, title: string, tags: string[]): Promise<number> {
+    const wit = await this.wit();
+    const patch = [
+      { op: "add", path: "/fields/System.Title", value: title },
+      { op: "add", path: "/fields/System.Tags", value: joinTags(tags) },
+    ];
+    const created = await wit.createWorkItem(null, patch, this.project, type);
+    if (typeof created?.id !== "number") {
+      throw new Error(`Creating a ${type} did not return an id`);
+    }
+    return created.id;
+  }
+
+  async getWorkItemTags(ids: number[]): Promise<WorkItemTags[]> {
+    if (ids.length === 0) return [];
+    const wit = await this.wit();
+    const out: WorkItemTags[] = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const batch = await wit.getWorkItemsBatch(
+        { ids: ids.slice(i, i + 200), fields: ["System.Tags"] },
+        this.project
+      );
+      for (const item of batch ?? []) {
+        out.push({
+          id: item.id as number,
+          tags: parseTags((item.fields?.["System.Tags"] as string) ?? ""),
+        });
+      }
+    }
+    return out;
+  }
+
+  async setWorkItemTags(id: number, tags: string[]): Promise<void> {
+    const wit = await this.wit();
+    await wit.updateWorkItem(
+      null,
+      [{ op: "add", path: "/fields/System.Tags", value: joinTags(tags) }],
+      id,
+      this.project
+    );
+  }
+
+  /** Soft delete — the work item goes to the project Recycle Bin. */
+  async deleteWorkItem(id: number): Promise<void> {
+    const wit = await this.wit();
+    await wit.deleteWorkItem(id, this.project);
+  }
+
+  async queryWorkItemIdsByTag(tag: string): Promise<number[]> {
+    const wit = await this.wit();
+    const escaped = tag.replace(/'/g, "''");
+    const result = await wit.queryByWiql(
+      {
+        query:
+          `SELECT [System.Id] FROM WorkItems ` +
+          `WHERE [System.Tags] CONTAINS '${escaped}' ` +
+          `AND [System.TeamProject] = @project ORDER BY [System.Id]`,
+      },
+      { project: this.project }
+    );
+    return (result?.workItems ?? []).map((wi) => wi.id as number);
   }
 }
