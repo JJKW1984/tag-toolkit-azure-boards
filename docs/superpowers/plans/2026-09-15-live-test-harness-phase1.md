@@ -2508,7 +2508,9 @@ describe("mergeTags ability", () => {
     const result = await mergeTagsAbility.run(contextFor(client));
 
     expect(result.status).toBe("fail");
-    expect(result.detail).toMatch(/still present/);
+    // With delete stubbed out the work items still carry the source, which the
+    // ability reports before it reaches the tag-list check.
+    expect(result.detail).toMatch(/still carries/);
   });
 
   it("fails when a work item never receives the target tag", async () => {
@@ -2688,13 +2690,8 @@ describe("deleteTag ability", () => {
 
   it("fails when the cascade never reaches the work items", async () => {
     const client = new FakeAdoClient();
-    const realDelete = client.deleteTag.bind(client);
-    jest.spyOn(client, "deleteTag").mockImplementation(async (id) => {
-      // Remove the tag definition but leave work items untouched.
-      const before = client.tagsOf(0);
-      void before;
-      await realDelete(id);
-    });
+    // deleteTag behaves normally (so the tag leaves the list), but the work
+    // items are reported as still carrying it — the cascade never lands.
     jest.spyOn(client, "getWorkItemTags").mockResolvedValue([
       { id: 100, tags: ["livetest-r1-delete-a"] },
     ]);
@@ -3339,20 +3336,17 @@ describe("main — cleanup mode", () => {
     expect(code).toBe(0);
     expect(ManifestStore.open(store.path).manifest.status).toBe("cleaned");
   });
-
-  it("returns 0 when --cleanup-all finds no in-progress manifests", async () => {
-    const code = await main(["--cleanup-all", "--pat", "x"], {
-      log: () => undefined,
-      ask: async () => "",
-      now: () => new Date(),
-    });
-
-    expect(code).toBe(0);
-  });
 });
 ```
 
-The cleanup tests exercise real `AdoClient` construction but never reach the network, because the manifests carry no work items or tags. `--cleanup-all` reads `.live-test-runs/` in the repo working directory, which is gitignored and empty in a clean checkout.
+The `--cleanup` test exercises real `AdoClient` construction but never reaches the
+network, because the manifest carries no work items or tags.
+
+Do **not** add a unit test for `--cleanup-all` here: it reads the repo's real
+`.live-test-runs/` directory, so a leftover in-progress manifest from a local run would
+make the test attempt live deletes against a real org with a bogus PAT. The flag's parsing
+is covered by the Task 8 tests, and its behaviour is exercised by the CI sweep step in
+Task 17.
 
 - [ ] **Step 3: Run the test to verify it fails**
 
@@ -3596,12 +3590,15 @@ jobs:
           AZDO_TEST_ORG_URL: ${{ vars.AZDO_TEST_ORG_URL }}
           AZDO_TEST_PROJECT: ${{ vars.AZDO_TEST_PROJECT }}
           AZDO_TEST_PAT: ${{ secrets.AZDO_TEST_PAT }}
+          # Passed via env, never interpolated into the script body: a `${{ }}`
+          # expression inside `run:` lets a crafted input execute as shell.
+          WORK_ITEM_TYPE: ${{ inputs.work_item_type }}
         run: |
           pnpm live-test \
             --org "$AZDO_TEST_ORG_URL" \
             --project "$AZDO_TEST_PROJECT" \
             --pat "$AZDO_TEST_PAT" \
-            --work-item-type "${{ inputs.work_item_type }}" \
+            --work-item-type "$WORK_ITEM_TYPE" \
             --yes
 
       - name: Sweep up any data left by a failed run
@@ -3612,7 +3609,8 @@ jobs:
 
       - name: Upload run manifest and report
         if: always()
-        uses: actions/upload-artifact@v6
+        # SHA-pinned to match build.yml's existing style — this workflow handles a PAT.
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f #v6.0.0
         with:
           name: live-test-run
           path: .live-test-runs/
