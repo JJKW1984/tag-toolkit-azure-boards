@@ -20,7 +20,7 @@
 - **Credentials come from CLI flags only** (`--org`, `--project`, `--pat`). Never read `.env`, and never add a `dotenv` dependency.
 - **Every error string that reaches a report, a log line, or a manifest must pass through `sanitizeError` from `src/utils/sanitizeError.ts`** — the harness holds a PAT and its reports are uploaded as CI artifacts.
 - **Exit codes:** `0` only if every ability passed; non-zero otherwise. CI depends on this.
-- **Commit messages** use conventional-commit prefixes (`feat:`, `fix:`, `docs:`, `test:`, `chore:`) and end with the line `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- **Commit messages** use conventional-commit prefixes (`feat:`, `fix:`, `docs:`, `test:`, `chore:`) and end with a `Co-Authored-By: Claude <model> <noreply@anthropic.com>` trailer naming the model that actually authored the commit (e.g. `Claude Haiku 4.5`, `Claude Opus 5`). Accurate authorship beats a uniform string.
 - **Run `pnpm test` before every commit.** It must be green.
 
 ## Deviations From The Spec (approved as part of this plan)

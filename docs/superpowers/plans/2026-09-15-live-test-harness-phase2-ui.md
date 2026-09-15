@@ -24,7 +24,7 @@
 - **Work item deletion is always soft** (Recycle Bin), inherited from `cleanupRun`.
 - **Tests run serially** (`workers: 1`, `fullyParallel: false`). They share one project's tag state; parallelism would make them flake against each other.
 - **Never assert against azure-devops-ui's internal DOM structure.** Target `data-testid` hooks the project owns, or accessible roles/names.
-- **Commit messages** use conventional-commit prefixes and end with `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- **Commit messages** use conventional-commit prefixes and end with a `Co-Authored-By: Claude <model> <noreply@anthropic.com>` trailer naming the model that actually authored the commit.
 - **Run `pnpm test` before every commit.** It must be green.
 
 ## Deviations From The Spec
