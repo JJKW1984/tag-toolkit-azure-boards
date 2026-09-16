@@ -9,3 +9,4 @@ azure-devops-extension.test.json
 .superpowers/
 .live-test-runs/
 playwright-report/
+.worktrees/
