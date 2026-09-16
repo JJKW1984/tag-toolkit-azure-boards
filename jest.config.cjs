@@ -1,4 +1,5 @@
-module.exports = {
+const extensionProject = {
+  displayName: "extension",
   preset: "ts-jest",
   testEnvironment: "jsdom",
   roots: ["<rootDir>/src"],
@@ -20,11 +21,36 @@ module.exports = {
         tsconfig: "<rootDir>/tsconfig.test.json"
       }
     ]
-  },
+  }
+};
+
+const liveTestProject = {
+  displayName: "live-test",
+  preset: "ts-jest",
+  testEnvironment: "node",
+  roots: ["<rootDir>/live-test"],
+  // Deliberately NOT matching *.spec.ts: Phase 2 puts Playwright specs under
+  // live-test/ui/specs, and Jest must never try to run those.
+  testMatch: ["**/*.test.ts"],
+  moduleFileExtensions: ["ts", "js", "json"],
+  transform: {
+    "^.+\\.ts$": [
+      "ts-jest",
+      {
+        tsconfig: "<rootDir>/tsconfig.live-test.json"
+      }
+    ]
+  }
+};
+
+module.exports = {
+  projects: [extensionProject, liveTestProject],
   collectCoverageFrom: [
     "src/**/*.{ts,tsx}",
+    "live-test/**/*.ts",
     "!src/**/*.d.ts",
-    "!src/test/**"
+    "!src/test/**",
+    "!live-test/test/**"
   ],
   coverageReporters: ["text", "lcov", "cobertura"],
   coverageDirectory: "coverage",

@@ -47,6 +47,50 @@ describe("sanitizeError", () => {
     expect(result).toBe("Unauthorized: Bearer [redacted]");
   });
 
+  it("redacts the credential in an Authorization: Basic header, not just the scheme", () => {
+    // The key/value run used to stop at the first whitespace, so the scheme was
+    // redacted and the base64 credential was left standing right next to it.
+    const result = sanitizeError(
+      new Error("request rejected: Authorization: Basic am9zZXBoOnNlY3JldA==")
+    );
+
+    expect(result).not.toContain("am9zZXBoOnNlY3JldA");
+    expect(result).toBe("request rejected: Authorization=[redacted]");
+  });
+
+  it("redacts the credential in an Authorization: Bearer header", () => {
+    const result = sanitizeError(new Error("rejected: Authorization: Bearer abc123.xyz"));
+
+    expect(result).not.toContain("abc123");
+    expect(result).toBe("rejected: Authorization=[redacted]");
+  });
+
+  it("redacts a bare Basic credential", () => {
+    const result = sanitizeError(new Error("sent Basic am9zZXBoOnNlY3JldA== upstream"));
+    expect(result).not.toContain("am9zZXBoOnNlY3JldA");
+  });
+
+  it("redacts an all-letter bare Basic credential", () => {
+    const result = sanitizeError(new Error("sent Basic YWFhYWFhYWFhYWFhYWFh upstream"));
+    expect(result).not.toContain("YWFhYWFhYWFhYWFhYWFh");
+  });
+
+  it("redacts a bare basic credential regardless of case", () => {
+    const result = sanitizeError(new Error("sent basic am9zZXBoOnNlY3JldA== upstream"));
+    expect(result).not.toContain("am9zZXBoOnNlY3JldA");
+  });
+
+  it.each([
+    "Basic auth is required",
+    "Basic authentication is required",
+    "Basic settings were rejected",
+    "Basic operations completed",
+  ])("leaves the ordinary word Basic in prose alone: %s", (message) => {
+    // The value run has to be base64-*shaped*, not merely long — "Basic
+    // authentication is required" is a plausible real ADO/AAD message.
+    expect(sanitizeError(new Error(message))).toBe(message);
+  });
+
   it("redacts token-like key/value pairs", () => {
     const result = sanitizeError(new Error("permission denied token=abc123 authorization:secret"));
     expect(result).toBe("permission denied token=[redacted] authorization=[redacted]");
