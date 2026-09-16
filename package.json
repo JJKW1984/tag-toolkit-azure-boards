@@ -9,6 +9,7 @@
     "package:test": "pnpm run manifest:test && tfx extension create --manifest-globs vss-extension-dev.json",
     "test": "jest --runInBand",
     "live-test": "tsx live-test/cli.ts",
+    "live-test:ui": "playwright test -c live-test/ui/playwright.config.ts",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
@@ -21,6 +22,7 @@
     "tfx-cli": "^0.23.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^12.1.5",
     "@testing-library/user-event": "^14.6.1",
