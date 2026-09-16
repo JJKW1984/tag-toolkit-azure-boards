@@ -28,6 +28,7 @@ test("clearing the search restores the unfiltered table", async ({ page, seed })
   await expect(rowFor(page, seed.search.alpha)).toBeVisible();
 
   const restored = (await rowNames(page)).length;
+  // Holds as long as the project has more than 1 tag total — trivially true once the harness's own ~39 fixtures are seeded.
   expect(restored).toBeGreaterThan(filtered);
 });
 

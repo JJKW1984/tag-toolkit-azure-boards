@@ -1,4 +1,4 @@
-import { expect, openHub, rowNames, test } from "../fixtures";
+import { expect, openHub, rowNames, searchFor, test, totalTagCount } from "../fixtures";
 
 test("filters to tags starting with the selected letter", async ({ page }) => {
   await openHub(page);
@@ -10,27 +10,31 @@ test("filters to tags starting with the selected letter", async ({ page }) => {
   expect(names.every((n) => n.toUpperCase().startsWith("L"))).toBe(true);
 });
 
-test("the All tab restores every tag", async ({ page }) => {
+test("the All tab restores every tag", async ({ page, seed }) => {
   await openHub(page);
+  await searchFor(page, seed.runId);
   const nav = page.locator('[data-testid="alpha-nav"]');
 
   await nav.getByText("L", { exact: true }).click();
-  const filtered = (await rowNames(page)).length;
+  const filtered = await totalTagCount(page);
 
   await nav.getByText("All", { exact: true }).click();
-  const all = (await rowNames(page)).length;
+  const all = await totalTagCount(page);
 
   expect(all).toBeGreaterThanOrEqual(filtered);
 });
 
-test("offers only letters that have tags", async ({ page }) => {
+test("offers only letters that have tags", async ({ page, seed }) => {
   await openHub(page);
+  await searchFor(page, seed.runId);
   const nav = page.locator('[data-testid="alpha-nav"]');
 
   // Every seeded tag starts with "l", so L is always offered.
   await expect(nav.getByText("L", { exact: true })).toBeVisible();
 
-  // Q is offered only if the project genuinely has a tag starting with Q.
+  // Scoped to this run's own tags (all start with "l"), so Q can never
+  // legitimately appear here — this only checks AlphaNav doesn't spuriously
+  // offer a letter with zero tags in the current (searched) view.
   const namesStartingWithQ = (await rowNames(page)).filter((n) =>
     n.toUpperCase().startsWith("Q")
   );

@@ -240,6 +240,8 @@ Prerequisites:
 1. The `-develop` extension is installed in the target org (see Private
    Pre-Release Testing Workflow).
 2. You can sign in to that org interactively on this machine.
+3. The Playwright browser binary is installed: `pnpm exec playwright install
+   chromium` (one-time per machine/checkout).
 
 ```bash
 export LIVE_TEST_ORG=https://dev.azure.com/<org>
@@ -248,10 +250,16 @@ export LIVE_TEST_PAT=<pat>
 pnpm live-test:ui
 ```
 
-The first run opens a browser window — sign in when prompted, then run the
-command again. The session is stored in `.live-test-runs/playwright-profile/`
-and reused afterwards. When it expires, the suite fails with a message telling
+The first run opens a browser window — sign in when prompted, then the suite
+continues automatically (it waits up to 5 minutes for the sign-in to
+complete). The session is stored in `.live-test-runs/playwright-profile/` and
+reused afterwards. When it expires, the suite fails with a message telling
 you to sign in again rather than hanging on a login form.
+
+Set `HEADLESS=1` to run without a visible window (useful for scripted runs
+once a session is already stored). It cannot complete an interactive
+first-time sign-in, though, since there's no window for a human to sign in
+through — leave `HEADLESS` unset for the very first run.
 
 Fixture data is seeded through the REST API before the suite and removed after
 it, using the same run manifest as the API harness. If a run is interrupted

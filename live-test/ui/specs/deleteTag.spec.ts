@@ -15,7 +15,6 @@ test("deletes a selected tag after confirming the dialog", async ({ page, seed }
   await page.getByRole("button", { name: /^Delete \d+ tags?$/ }).click();
 
   await expect(dialog).toBeHidden({ timeout: 60_000 });
-  await searchFor(page, seed.del);
   await expect(rowFor(page, seed.del)).toHaveCount(0);
 });
 

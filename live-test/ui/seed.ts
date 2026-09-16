@@ -64,6 +64,12 @@ export async function seedFixtures(): Promise<SeedData> {
     org: config.orgUrl,
     project: config.project,
   });
+
+  // Written now, before any work items are created, so an interruption
+  // partway through seeding still leaves a pointer that teardownFixtures
+  // (and `pnpm live-test --cleanup-all`) can find and clean up.
+  fs.writeFileSync(SEED_FILE, `${JSON.stringify(seed, null, 2)}\n`, "utf8");
+
   const ctx = buildContext({ client, store, runId, workItemType: "Task" });
 
   await ctx.createWorkItem([seed.rename.old], "ui rename #1");
@@ -84,7 +90,6 @@ export async function seedFixtures(): Promise<SeedData> {
     await ctx.createWorkItem([tag], tag);
   }
 
-  fs.writeFileSync(SEED_FILE, `${JSON.stringify(seed, null, 2)}\n`, "utf8");
   return seed;
 }
 

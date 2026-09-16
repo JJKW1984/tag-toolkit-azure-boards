@@ -1,8 +1,12 @@
 import { expect, openHub, rowFor, searchFor, test } from "../fixtures";
+import { testTag } from "../../naming";
 
 test("renames a tag inline and shows the new name in the table", async ({ page, seed }) => {
   await openHub(page);
-  await searchFor(page, seed.rename.old);
+  // Search on a substring stable across the rename ("-ui-rename-" is shared by
+  // both seed.rename.old and seed.rename.new) so the row stays visible
+  // through the rename instead of falling out of a stale filter.
+  await searchFor(page, "-ui-rename-");
 
   await expect(rowFor(page, seed.rename.old)).toBeVisible();
 
@@ -23,9 +27,10 @@ test("abandons a rename when the edit is cancelled", async ({ page, seed }) => {
 
   await page.getByLabel(`Rename tag ${seed.rename.new}`).dblclick();
   const input = page.getByLabel("Edit tag name");
-  await input.fill("livetest-should-never-exist");
+  const canary = testTag(seed.runId, "ui", "should-never-exist");
+  await input.fill(canary);
   await input.press("Escape");
 
   await expect(rowFor(page, seed.rename.new)).toBeVisible();
-  await expect(rowFor(page, "livetest-should-never-exist")).toHaveCount(0);
+  await expect(rowFor(page, canary)).toHaveCount(0);
 });

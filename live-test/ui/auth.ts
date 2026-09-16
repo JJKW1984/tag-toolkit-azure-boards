@@ -36,13 +36,30 @@ export async function launchProfileContext(): Promise<BrowserContext> {
 /**
  * Fails fast and legibly when the stored session has expired, instead of
  * letting every selector time out against a login form.
+ *
+ * When not headless, a human may be looking at the window and can sign in
+ * interactively — so this waits (generously) for the page to leave the
+ * sign-in host before giving up, rather than failing before they get a
+ * chance to type credentials. Under HEADLESS=1 there is no one to sign in,
+ * so it fails immediately instead of waiting out a timeout no one can act on.
  */
 export async function assertSignedIn(page: Page): Promise<void> {
-  if (isSignInUrl(page.url())) {
-    throw new Error(
-      "Azure DevOps session has expired. Re-authenticate by running " +
-        "`pnpm live-test:ui` with a visible browser (HEADLESS unset) and signing in " +
-        "when the window opens, then run the suite again."
-    );
+  if (!isSignInUrl(page.url())) return;
+
+  if (process.env.HEADLESS !== "1") {
+    try {
+      await page.waitForURL((url) => !isSignInUrl(url.toString()), {
+        timeout: 5 * 60_000,
+      });
+      return;
+    } catch {
+      // fall through to the error below — still on a sign-in host after waiting
+    }
   }
+
+  throw new Error(
+    "Azure DevOps session has expired. Re-authenticate by running " +
+      "`pnpm live-test:ui` with a visible browser (HEADLESS unset) and signing in " +
+      "when the window opens, then run the suite again."
+  );
 }

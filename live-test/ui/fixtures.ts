@@ -34,7 +34,13 @@ export async function openHub(page: Page): Promise<void> {
   await page.waitForSelector('[data-testid="tag-row"]', { timeout: 60_000 });
 }
 
-/** Types into the hub's search box and lets the table settle. */
+/**
+ * Types into the hub's search box and lets the table settle.
+ * Asserts at least one row becomes visible — do not use this for a query
+ * expected to match zero rows (fill the search box directly instead), and do
+ * not call it a second time after an action that could have removed the very
+ * row you searched for (delete, or a rename that changes the matched text).
+ */
 export async function searchFor(page: Page, text: string): Promise<void> {
   const box = page.getByLabel("Search tags");
   await box.fill(text);
@@ -49,4 +55,18 @@ export async function rowNames(page: Page): Promise<string[]> {
   return page
     .locator('[data-testid="tag-row"]')
     .evaluateAll((els) => els.map((e) => e.getAttribute("data-tag-name") ?? ""));
+}
+
+/**
+ * The true total tag count for the current filter, even when it spans more
+ * than one page — rowNames() alone only sees the current page's rows.
+ */
+export async function totalTagCount(page: Page): Promise<number> {
+  const status = page.locator('[data-testid="pagination-status"]');
+  if ((await status.count()) > 0) {
+    const text = (await status.textContent()) ?? "";
+    const match = text.match(/\((\d+) tags?\)/);
+    if (match) return Number(match[1]);
+  }
+  return (await rowNames(page)).length;
 }
