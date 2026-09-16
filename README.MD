@@ -229,6 +229,38 @@ names. A green "List tags + counts" therefore proves that Analytics reports the
 right number for a known tag; it does **not** exercise production's filter, its
 paging, or its case-folding, so do not read it as coverage of the count feature.
 
+### UI-level tests (local only)
+
+The Playwright suite drives the installed `-develop` extension's real hub in a
+browser, covering the components and the client-side behaviors — search, A–Z
+navigation, pagination — that the API harness cannot reach.
+
+Prerequisites:
+
+1. The `-develop` extension is installed in the target org (see Private
+   Pre-Release Testing Workflow).
+2. You can sign in to that org interactively on this machine.
+
+```bash
+export LIVE_TEST_ORG=https://dev.azure.com/<org>
+export LIVE_TEST_PROJECT=<scratch-project>
+export LIVE_TEST_PAT=<pat>
+pnpm live-test:ui
+```
+
+The first run opens a browser window — sign in when prompted, then run the
+command again. The session is stored in `.live-test-runs/playwright-profile/`
+and reused afterwards. When it expires, the suite fails with a message telling
+you to sign in again rather than hanging on a login form.
+
+Fixture data is seeded through the REST API before the suite and removed after
+it, using the same run manifest as the API harness. If a run is interrupted
+before teardown, clean up with `pnpm live-test --cleanup-all --pat <pat>`.
+
+These tests are deliberately **not** part of CI: Azure DevOps sign-in is
+interactive, and automating it would need either a fragile stored session or a
+tenant-admin-provisioned service principal.
+
 ### Running it in CI
 
 `.github/workflows/live-test.yml` runs the harness on manual dispatch only. It
