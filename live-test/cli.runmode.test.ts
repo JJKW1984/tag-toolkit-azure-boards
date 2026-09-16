@@ -75,6 +75,23 @@ describe("main — run mode exit code", () => {
     expect(ManifestStore.open(manifestPath).manifest.status).toBe("in-progress");
   });
 
+  it("returns non-zero when every ability passed but the user leaves data in place", async () => {
+    const log: string[] = [];
+    const answers = ["P", "n"];
+    const code = await main(
+      ["--org", "https://dev.azure.com/o", "--project", "P", "--pat", "x"],
+      {
+        log: (m) => log.push(m),
+        ask: async () => answers.shift() as string,
+        now: () => new Date(),
+      }
+    );
+
+    expect(code).toBe(1);
+    expect(log.join("\n")).toContain("Left in place");
+    expect(cleanupRunMock).not.toHaveBeenCalled();
+  });
+
   it("returns 1 for a failing ability even when cleanup completed", async () => {
     runAbilitiesMock.mockResolvedValue([
       { name: "a", status: "fail", durationMs: 1, detail: "nope" },

@@ -39,6 +39,16 @@ describe("orgNameFromUrl", () => {
       /expected https:\/\/dev\.azure\.com\/<org>/
     );
   });
+
+  it("does not echo the rejected URL back in the error", () => {
+    expect(() => orgNameFromUrl("https://dev.azure.com/secret-pat")).not.toThrow();
+    try {
+      orgNameFromUrl("secret-pat");
+      throw new Error("expected orgNameFromUrl to reject");
+    } catch (e) {
+      expect((e as Error).message).not.toContain("secret-pat");
+    }
+  });
 });
 
 describe("listTags", () => {
@@ -97,6 +107,14 @@ describe("listTags", () => {
       .catch((e: unknown) => e);
 
     expect(isNotFound(error)).toBe(true);
+  });
+
+  it("preserves project context on a 404", async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(jsonResponse({ message: "gone" }, 404)) as unknown as typeof fetch;
+
+    await expect(newClient().deleteTag("1")).rejects.toThrow(/project "My Project"/);
   });
 });
 
@@ -325,5 +343,13 @@ describe("work item operations", () => {
   it("returns an empty array when the query matches nothing", async () => {
     mockWit.queryByWiql.mockResolvedValue({});
     expect(await newClient().queryWorkItemIdsByTag("x")).toEqual([]);
+  });
+
+  it("finds live work items for one run by title marker or run-scoped tag prefix", async () => {
+    mockWit.queryByWiql.mockResolvedValue({ workItems: [{ id: 3 }, { id: 4 }] });
+
+    expect(await newClient().queryWorkItemIdsByRunId("r1-abc")).toEqual([3, 4]);
+    expect(mockWit.queryByWiql.mock.calls[0][0].query).toContain("[System.Title] CONTAINS '[livetest-r1-abc]'");
+    expect(mockWit.queryByWiql.mock.calls[0][0].query).toContain("[System.Tags] CONTAINS 'livetest-r1-abc-'");
   });
 });

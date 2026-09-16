@@ -1,9 +1,21 @@
+import { randomBytes } from "node:crypto";
+
 /** Every tag and work item the harness creates carries this prefix. */
 export const LIVE_TEST_PREFIX = "livetest-";
 
+/** The run-scoped tag prefix this harness owns for one invocation. */
+export function liveTestTagPrefix(runId: string): string {
+  return `${LIVE_TEST_PREFIX}${runId}-`;
+}
+
+/** The run-scoped title marker this harness stamps onto every work item. */
+export function liveTestWorkItemMarker(runId: string): string {
+  return `[${LIVE_TEST_PREFIX}${runId}]`;
+}
+
 /** Builds the tag name for one ability's scoped test data. */
 export function testTag(runId: string, ability: string, suffix: string): string {
-  return `${LIVE_TEST_PREFIX}${runId}-${ability}-${suffix}`;
+  return `${liveTestTagPrefix(runId)}${ability}-${suffix}`;
 }
 
 /**
@@ -17,16 +29,24 @@ export function testTag(runId: string, ability: string, suffix: string): string 
  * still trust when it has to decide whether an id is safe to delete.
  */
 export function testWorkItemTitle(runId: string, title: string): string {
-  return `[${LIVE_TEST_PREFIX}${runId}] ${title}`;
+  return `${liveTestWorkItemMarker(runId)} ${title}`;
 }
 
 /** True when a title carries the marker `testWorkItemTitle` stamps on. */
-export function isLiveTestWorkItemTitle(title: string | undefined): boolean {
-  return (title ?? "").startsWith(`[${LIVE_TEST_PREFIX}`);
+export function isLiveTestWorkItemTitle(title: string | undefined, runId: string): boolean {
+  return (title ?? "").startsWith(`${liveTestWorkItemMarker(runId)} `);
 }
 
-/** Compact UTC run id, e.g. 20260915140211. Used for manifest/report filenames. */
-export function newRunId(now: Date): string {
+/** True when a tag name is in the current run's namespace. */
+export function isLiveTestTagName(tag: string, runId: string): boolean {
+  return tag.startsWith(liveTestTagPrefix(runId));
+}
+
+/** Compact UTC run id, e.g. 20260915140211-1a2b3c4d. Used for manifest/report filenames. */
+export function newRunId(
+  now: Date,
+  uniqueSuffix = randomBytes(4).toString("hex")
+): string {
   const pad = (n: number): string => String(n).padStart(2, "0");
   return (
     String(now.getUTCFullYear()) +
@@ -34,6 +54,7 @@ export function newRunId(now: Date): string {
     pad(now.getUTCDate()) +
     pad(now.getUTCHours()) +
     pad(now.getUTCMinutes()) +
-    pad(now.getUTCSeconds())
+    pad(now.getUTCSeconds()) +
+    `-${uniqueSuffix}`
   );
 }

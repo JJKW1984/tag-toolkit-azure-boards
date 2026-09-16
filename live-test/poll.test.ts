@@ -70,4 +70,22 @@ describe("pollUntil", () => {
       pollUntil({ probe, until: () => true, ...clock })
     ).rejects.toThrow("analytics exploded");
   });
+
+  it("fails a probe that outlives the remaining budget", async () => {
+    const probe = jest.fn(
+      () =>
+        new Promise<number>((resolve) => {
+          setTimeout(() => resolve(1), 50);
+        })
+    );
+
+    await expect(
+      pollUntil({
+        probe,
+        until: () => false,
+        timeoutMs: 10,
+        probeTimeoutMs: 10,
+      })
+    ).rejects.toThrow("poll probe timed out after 10ms");
+  });
 });

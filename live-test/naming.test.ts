@@ -1,6 +1,9 @@
 import {
   isLiveTestWorkItemTitle,
+  isLiveTestTagName,
   LIVE_TEST_PREFIX,
+  liveTestTagPrefix,
+  liveTestWorkItemMarker,
   newRunId,
   testTag,
   testWorkItemTitle,
@@ -23,12 +26,21 @@ describe("testTag", () => {
 });
 
 describe("newRunId", () => {
-  it("formats a UTC timestamp with no separators", () => {
-    expect(newRunId(new Date(Date.UTC(2026, 8, 15, 14, 2, 11)))).toBe("20260915140211");
+  it("formats a UTC timestamp with a unique suffix", () => {
+    expect(newRunId(new Date(Date.UTC(2026, 8, 15, 14, 2, 11)), "1a2b3c4d")).toBe(
+      "20260915140211-1a2b3c4d"
+    );
   });
 
   it("zero-pads single-digit components", () => {
-    expect(newRunId(new Date(Date.UTC(2026, 0, 2, 3, 4, 5)))).toBe("20260102030405");
+    expect(newRunId(new Date(Date.UTC(2026, 0, 2, 3, 4, 5)), "feedbeef")).toBe(
+      "20260102030405-feedbeef"
+    );
+  });
+
+  it("makes two runs in the same second distinct", () => {
+    const now = new Date(Date.UTC(2026, 8, 15, 14, 2, 11));
+    expect(newRunId(now, "aaaaaaaa")).not.toBe(newRunId(now, "bbbbbbbb"));
   });
 });
 
@@ -38,21 +50,34 @@ describe("testWorkItemTitle", () => {
   });
 
   it("produces a title the ownership check recognises", () => {
-    expect(isLiveTestWorkItemTitle(testWorkItemTitle("20260915140211", "x"))).toBe(true);
+    expect(
+      isLiveTestWorkItemTitle(testWorkItemTitle("20260915140211-1a2b3c4d", "x"), "20260915140211-1a2b3c4d")
+    ).toBe(true);
   });
 });
 
 describe("isLiveTestWorkItemTitle", () => {
   it("rejects an ordinary work item title", () => {
-    expect(isLiveTestWorkItemTitle("Customer cannot log in")).toBe(false);
+    expect(isLiveTestWorkItemTitle("Customer cannot log in", "r1")).toBe(false);
   });
 
   it("rejects a title that merely mentions the prefix later on", () => {
-    expect(isLiveTestWorkItemTitle("Investigate livetest- leftovers")).toBe(false);
+    expect(isLiveTestWorkItemTitle("Investigate livetest- leftovers", "r1")).toBe(false);
+  });
+
+  it("rejects another run's title marker", () => {
+    expect(isLiveTestWorkItemTitle(`${liveTestWorkItemMarker("r2")} x`, "r1")).toBe(false);
   });
 
   it("treats a missing title as no evidence of ownership", () => {
-    expect(isLiveTestWorkItemTitle(undefined)).toBe(false);
-    expect(isLiveTestWorkItemTitle("")).toBe(false);
+    expect(isLiveTestWorkItemTitle(undefined, "r1")).toBe(false);
+    expect(isLiveTestWorkItemTitle("", "r1")).toBe(false);
+  });
+});
+
+describe("isLiveTestTagName", () => {
+  it("accepts only tags in the current run namespace", () => {
+    expect(isLiveTestTagName(`${liveTestTagPrefix("r1")}merge-a`, "r1")).toBe(true);
+    expect(isLiveTestTagName(`${liveTestTagPrefix("r2")}merge-a`, "r1")).toBe(false);
   });
 });

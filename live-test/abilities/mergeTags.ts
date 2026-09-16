@@ -31,7 +31,8 @@ async function run(
     // anything else aborts before the first write.
     const owned = new Set(ids);
 
-    // Phase 1 — additive across every source, nothing removed yet.
+    // Phase 1 — read and validate every source first, nothing written yet.
+    const pendingUpdates = new Map<number, string[]>();
     for (const source of sources) {
       const candidates = await ctx.client.queryWorkItemIdsByTag(source);
       const foreign = candidates.filter((id) => !owned.has(id));
@@ -49,8 +50,12 @@ async function run(
       for (const item of current) {
         if (!item.tags.includes(source)) continue; // WIQL CONTAINS is substring-ish
         if (item.tags.includes(target)) continue;
-        await ctx.client.setWorkItemTags(item.id, [...item.tags, target]);
+        pendingUpdates.set(item.id, [...item.tags, target]);
       }
+    }
+
+    for (const [id, tags] of pendingUpdates) {
+      await ctx.client.setWorkItemTags(id, tags);
     }
 
     // Phase 2 — delete sources; ADO cascades each off its work items.

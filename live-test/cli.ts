@@ -243,6 +243,7 @@ export async function main(argv: string[], io: MainIo = defaultIo): Promise<numb
     }
   } else {
     io.log(`\nLeft in place. Clean up later with:\n  pnpm live-test --cleanup ${store.path} --pat <pat>`);
+    return 1;
   }
 
   return allPassed(results) ? 0 : 1;

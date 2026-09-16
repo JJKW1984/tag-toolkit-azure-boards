@@ -70,6 +70,11 @@ describe("sanitizeError", () => {
     expect(result).not.toContain("am9zZXBoOnNlY3JldA");
   });
 
+  it("redacts an all-letter bare Basic credential", () => {
+    const result = sanitizeError(new Error("sent Basic YWFhYWFhYWFhYWFhYWFh upstream"));
+    expect(result).not.toContain("YWFhYWFhYWFhYWFhYWFh");
+  });
+
   it("redacts a bare basic credential regardless of case", () => {
     const result = sanitizeError(new Error("sent basic am9zZXBoOnNlY3JldA== upstream"));
     expect(result).not.toContain("am9zZXBoOnNlY3JldA");

@@ -1,5 +1,6 @@
 // live-test/test/fakeAdoClient.ts
 import { TagItem } from "../../src/types";
+import { isLiveTestTagName, isLiveTestWorkItemTitle } from "../naming";
 import { NotFoundError } from "../errors";
 import { IAdoClient, WorkItemTags } from "../types";
 
@@ -153,5 +154,21 @@ export class FakeAdoClient implements IAdoClient {
     return this.live()
       .filter((i) => i.tags.includes(tag))
       .map((i) => i.id);
+  }
+
+  async queryWorkItemIdsByRunId(runId: string): Promise<number[]> {
+    this.maybeFail("queryWorkItemIdsByRunId");
+    return this.live()
+      .filter(
+        (i) =>
+          isLiveTestWorkItemTitle(i.title, runId) ||
+          i.tags.some((tag) => isLiveTestTagName(tag, runId))
+      )
+      .map((i) => i.id);
+  }
+
+  async listRunTags(runId: string): Promise<string[]> {
+    this.maybeFail("listRunTags");
+    return this.tagNames().filter((tag) => isLiveTestTagName(tag, runId));
   }
 }

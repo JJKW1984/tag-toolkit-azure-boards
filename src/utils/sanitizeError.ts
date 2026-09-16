@@ -4,12 +4,11 @@ export function sanitizeError(raw: unknown): string {
   const withoutUrls = firstLine.replace(/\bhttps?:\/\/[^\s,;)>"'\]]+/gi, "[redacted-url]");
   const withoutBearer = withoutUrls.replace(/\bBearer\s+[^\s,;]+/gi, "Bearer [redacted]");
   // `Basic <base64>` carries the credential in the value, not after a `token=`
-  // marker. The run must be base64-*shaped*, not merely long: the lookahead
-  // requires a digit or a +/=/ character somewhere in it, so ordinary prose
-  // like "Basic authentication is required" — a plausible real ADO/AAD
-  // message — is left intact.
+  // marker. The run need only be long enough to look like a real credential:
+  // Basic auth accepts all-letter base64 as well, so requiring a digit or a
+  // +/=/ character would miss valid secrets such as "YWFhYWFhYWFhYWFhYWFh".
   const withoutBasic = withoutBearer.replace(
-    /\bBasic\s+(?=[A-Za-z0-9+/_-]*[0-9+/=])[A-Za-z0-9+/_-]{16,}={0,2}/gi,
+    /\bBasic\s+[A-Za-z0-9+/_-]{16,}={0,2}(?=$|[\s,;)>"'\]])/gi,
     "Basic [redacted]"
   );
   // The optional scheme word matters: without it the value run stops at the

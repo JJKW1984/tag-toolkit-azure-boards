@@ -205,7 +205,7 @@ Before creating anything, `runner.ts` writes `.live-test-runs/<runId>.json`:
 
 ```json
 {
-  "runId": "20260915140211",
+  "runId": "20260915140211-1a2b3c4d",
   "org": "https://dev.azure.com/myorg",
   "project": "TagToolkit-Test",
   "status": "in-progress",
@@ -214,7 +214,9 @@ Before creating anything, `runner.ts` writes `.live-test-runs/<runId>.json`:
 }
 ```
 
-Every work item and tag is appended to this file **immediately after creation**, before the next step proceeds — so a crash mid-run always leaves an accurate, disk-persisted record of everything that exists. `pnpm live-test --cleanup <path>` reads a manifest and deletes every recorded work item/tag regardless of run status, then sets `status: "cleaned"`. On normal completion, declining the cleanup prompt leaves the manifest as `in-progress` and prints its path so it can be cleaned up later; confirming sets it to `cleaned`.
+`runId` now combines the UTC second stamp with a per-run random suffix (for example `20260915140211-1a2b3c4d`) so concurrent runs do not collide on manifest filenames or tag namespaces.
+
+Every work item and tag is appended to this file **as soon as the harness records it**, and cleanup also re-discovers live resources by the run's title marker/tag prefix before it deletes anything. That means a crash in the create-then-record gap can still be recovered on the next `--cleanup`: the manifest remains the primary ledger, but cleanup is no longer limited to only ids/names already flushed to disk. `pnpm live-test --cleanup <path>` reads a manifest, refuses foreign resources, deletes only resources it can prove belong to that run, and sets `status: "cleaned"` only when every delete resolved. On normal completion, declining the cleanup prompt leaves the manifest as `in-progress`, prints its path so it can be cleaned up later, and exits non-zero; confirming cleanup sets it to `cleaned` only if the sweep finishes cleanly.
 
 `.live-test-runs/` is added to `.gitignore`.
 
@@ -439,7 +441,7 @@ Relies on the `cli.ts` exit-code contract noted under [Safety](#safety): non-zer
 1. Run `pnpm live-test --org <test-org> --project <test-project> --pat <pat>` against a scratch ADO project — confirmation prompt appears, requires typing the project name.
 2. All 5 abilities run and report PASS against a clean project.
 3. Console summary and `.live-test-runs/<runId>-report.json` both reflect the same results.
-4. Decline the cleanup prompt — manifest remains `in-progress`, test work items/tags remain visible in ADO.
+4. Decline the cleanup prompt — manifest remains `in-progress`, test work items/tags remain visible in ADO, and the command exits non-zero so callers do not mistake the run for a clean success.
 5. Run `pnpm live-test --cleanup .live-test-runs/<runId>.json` — all recorded work items/tags are removed, manifest becomes `cleaned`.
 6. Kill the process mid-run (e.g. after the merge ability starts) — confirm the manifest on disk reflects everything created up to that point, and `--cleanup` against it removes all of it.
 7. Deliberately break one ability's assertion (e.g. point it at a nonexistent tag) — confirm the run continues through the remaining abilities and reports the failure with detail, rather than aborting.
@@ -451,4 +453,4 @@ Relies on the `cli.ts` exit-code contract noted under [Safety](#safety): non-zer
 
 ### CI
 11. Trigger `.github/workflows/live-test.yml` manually in GitHub Actions — the job waits for `live-test` environment approval, then runs, uploads the report/manifest as artifacts, and goes red if an ability fails.
-12. Force a mid-run failure in the CI job — confirm the `if: failure()` step still runs `--cleanup` against the manifest and removes test data.
+12. Force a mid-run failure in the CI job — confirm the workflow's unconditional cleanup step still runs `pnpm live-test --cleanup-all`, retries every manifest left `in-progress`, and removes test data.

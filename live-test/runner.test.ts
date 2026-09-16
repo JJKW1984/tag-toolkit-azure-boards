@@ -202,6 +202,30 @@ describe("cleanupRun", () => {
 });
 
 describe("cleanupRun — provenance", () => {
+  it("recovers and deletes a created work item even if it was never flushed to the manifest", async () => {
+    const client = new FakeAdoClient();
+    const store = newStore();
+    const recovered = client.seedWorkItem(
+      ["livetest-r1-gap-a"],
+      "[livetest-r1] created before persistence"
+    );
+
+    await cleanupRun(client, store, () => undefined);
+
+    expect(store.manifest.status).toBe("cleaned");
+    await expect(client.getWorkItemTags([recovered])).rejects.toThrow(/404/);
+  });
+
+  it("recovers and deletes a run tag even if it was never flushed to the manifest", async () => {
+    const client = new FakeAdoClient();
+    const store = newStore();
+    client.seedWorkItem(["livetest-r1-gap-a"], "[livetest-r1] recovered");
+
+    await cleanupRun(client, store, () => undefined);
+
+    expect(client.tagNames()).not.toContain("livetest-r1-gap-a");
+  });
+
   it("refuses to delete a work item id the harness did not create", async () => {
     const client = new FakeAdoClient();
     // A real production work item: no live-test marker in its title, no
@@ -328,6 +352,18 @@ describe("cleanupRun — provenance", () => {
 
     // A manifest naming tags the harness did not create is corrupt; reporting a
     // clean sweep would hide that from the human who needs to look at it.
+    expect(store.manifest.status).toBe("in-progress");
+  });
+
+  it("refuses another run's tag namespace", async () => {
+    const client = new FakeAdoClient();
+    client.seedWorkItem(["livetest-r2-x-a"], "[livetest-r2] foreign");
+    const store = newStore();
+    store.addTag("livetest-r2-x-a");
+
+    await cleanupRun(client, store, () => undefined);
+
+    expect(client.tagNames()).toContain("livetest-r2-x-a");
     expect(store.manifest.status).toBe("in-progress");
   });
 

@@ -2,7 +2,13 @@
 import { sanitizeError } from "../src/utils/sanitizeError";
 import { isNotFound } from "./errors";
 import { ManifestStore } from "./manifest";
-import { isLiveTestWorkItemTitle, LIVE_TEST_PREFIX, testWorkItemTitle } from "./naming";
+import {
+  isLiveTestTagName,
+  isLiveTestWorkItemTitle,
+  liveTestTagPrefix,
+  liveTestWorkItemMarker,
+  testWorkItemTitle,
+} from "./naming";
 import { formatResultLine } from "./report";
 import { Ability, AbilityContext, AbilityResult, IAdoClient, WorkItemTags } from "./types";
 
@@ -73,12 +79,9 @@ export async function runAbilities(deps: RunDeps): Promise<AbilityResult[]> {
  * check is the fallback for an item created before titles were marked. An
  * absent title is not evidence of ownership.
  */
-function isOwnedWorkItem(item: WorkItemTags | undefined): boolean {
+function isOwnedWorkItem(item: WorkItemTags | undefined, runId: string): boolean {
   if (!item) return false;
-  return (
-    isLiveTestWorkItemTitle(item.title) ||
-    item.tags.some((t) => t.startsWith(LIVE_TEST_PREFIX))
-  );
+  return isLiveTestWorkItemTitle(item.title, runId) || item.tags.some((t) => isLiveTestTagName(t, runId));
 }
 
 /**
@@ -96,22 +99,54 @@ function isOwnedWorkItem(item: WorkItemTags | undefined): boolean {
  * harness. `--cleanup <path>` takes an arbitrary path and `--cleanup-all`
  * sweeps a directory, so a stale, hand-edited, misplaced or planted manifest
  * could otherwise name real production data and have it destroyed without a
- * murmur. A tag qualifies when its name carries LIVE_TEST_PREFIX; a work item
- * qualifies when its title carries the marker, or it still carries a live-test
- * tag. The whole manifest is scanned before the first delete, so a corrupt one
- * is caught while its contents are still intact. A manifest naming anything
- * foreign is corrupt by definition, so the run is also left in-progress: a
- * human should look before anything reports a clean sweep.
+ * murmur. Ownership is run-scoped, not merely harness-scoped: a tag qualifies
+ * only in the current run's namespace, and a work item only when its title
+ * carries this run's marker or it still carries one of this run's tags. The
+ * whole manifest is scanned before the first delete, so a corrupt one is caught
+ * while its contents are still intact. A manifest naming anything foreign is
+ * corrupt by definition, so the run is also left in-progress: a human should
+ * look before anything reports a clean sweep.
+ *
+ * Cleanup also re-discovers the current run's live resources from runId-stamped
+ * titles and tags before it starts deleting. That closes the create-then-record
+ * gap: if a process dies after ADO creates a work item but before its id is
+ * flushed to disk, the next cleanup still finds and deletes it.
  */
 export async function cleanupRun(
   client: IAdoClient,
   store: ManifestStore,
   log: (message: string) => void
 ): Promise<void> {
+  const { runId } = store.manifest;
+  const titleMarker = liveTestWorkItemMarker(runId);
+  const tagPrefix = liveTestTagPrefix(runId);
+  let discoveredWorkItems: number[] = [];
+  let discoveredTags: string[] = [];
+  let discoveredWorkItemsKnown = false;
+  let discoveredTagsKnown = false;
+
+  try {
+    discoveredWorkItems = await client.queryWorkItemIdsByRunId(runId);
+    discoveredWorkItemsKnown = true;
+    for (const id of discoveredWorkItems) store.addWorkItem(id);
+  } catch (e) {
+    log(`  could not enumerate live work items for run ${runId}: ${sanitizeError(e)}`);
+  }
+
+  try {
+    discoveredTags = await client.listRunTags(runId);
+    discoveredTagsKnown = true;
+    for (const tag of discoveredTags) store.addTag(tag);
+  } catch (e) {
+    log(`  could not enumerate live tags for run ${runId}: ${sanitizeError(e)}`);
+  }
+
   const { workItems, tags } = store.manifest;
   log(`Cleaning up ${workItems.length} work items and ${tags.length} tags…`);
   let unresolved = 0;
   let refused = 0;
+  const liveWorkItemIds = new Set(discoveredWorkItems);
+  const liveTags = new Set(discoveredTags);
 
   // --- Scan phase. Nothing is destroyed here.
   const ownedWorkItems: number[] = [];
@@ -125,18 +160,18 @@ export async function cleanupRun(
       [item] = await client.getWorkItemTags([id]);
     } catch (e) {
       // Already gone is the outcome we wanted: not a refusal, not a failure.
-      if (isNotFound(e)) continue;
+      if (isNotFound(e) && discoveredWorkItemsKnown) continue;
       unresolved += 1;
       log(`  could not read work item ${id} to check provenance: ${sanitizeError(e)}`);
       continue;
     }
 
-    if (!isOwnedWorkItem(item)) {
+    if (!isOwnedWorkItem(item, runId)) {
       refused += 1;
       log(
         `  REFUSING to delete work item ${id} — its title does not carry the ` +
-          `"${LIVE_TEST_PREFIX}" marker and it holds no live-test tag, so this ` +
-          `harness did not create it. Manifest ${store.path} is corrupt or was ` +
+          `"${titleMarker}" marker and it holds no "${tagPrefix}" tag, so this ` +
+          `run did not create it. Manifest ${store.path} is corrupt or was ` +
           `hand-edited; inspect it by hand.`
       );
       continue;
@@ -146,16 +181,17 @@ export async function cleanupRun(
 
   const ownedTags: string[] = [];
   for (const tag of tags) {
-    if (!tag.startsWith(LIVE_TEST_PREFIX)) {
+    if (!isLiveTestTagName(tag, runId)) {
       refused += 1;
       log(
         `  REFUSING to delete tag ${sanitizeError(JSON.stringify(tag))} — it does ` +
-          `not start with "${LIVE_TEST_PREFIX}", so this harness did not create ` +
+          `not start with "${tagPrefix}", so this run did not create ` +
           `it. Manifest ${store.path} is corrupt or was hand-edited; inspect it ` +
           `by hand.`
       );
       continue;
     }
+    if (discoveredTagsKnown && !liveTags.has(tag)) continue;
     ownedTags.push(tag);
   }
 

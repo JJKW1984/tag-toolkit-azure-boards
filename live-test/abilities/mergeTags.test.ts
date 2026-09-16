@@ -96,6 +96,19 @@ describe("mergeTags ability", () => {
     expect(client.tagsOf(foreign)).toEqual(["livetest-r1-merge-a"]);
   });
 
+  it("does not partially write earlier sources before a later source fails ownership validation", async () => {
+    const client = new FakeAdoClient();
+    const context = contextFor(client);
+    const setSpy = jest.spyOn(client, "setWorkItemTags");
+    const foreign = client.seedWorkItem(["livetest-r1-merge-c"]);
+
+    const result = await runWithPollSettings(context, FAST_POLL_FOR_TESTS);
+
+    expect(result.status).toBe("fail");
+    expect(result.detail).toContain(String(foreign));
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
   it("reports a sanitized failure when the client throws", async () => {
     const client = new FakeAdoClient();
     client.failNext("queryWorkItemIdsByTag", "wiql blew up at https://dev.azure.com/o");

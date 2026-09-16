@@ -55,6 +55,8 @@ export interface IAdoClient {
   setWorkItemTags(id: number, tags: string[]): Promise<void>;
   deleteWorkItem(id: number): Promise<void>;
   queryWorkItemIdsByTag(tag: string): Promise<number[]>;
+  queryWorkItemIdsByRunId(runId: string): Promise<number[]>;
+  listRunTags(runId: string): Promise<string[]>;
 }
 
 export interface AbilityContext {
