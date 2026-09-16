@@ -236,7 +236,7 @@ export const TagManagerApp: React.FC = () => {
         description="Manage work item tags across this project."
         commandBarItems={commandBarItems}
       />
-      <div className="page-content">
+      <div className="page-content" data-testid="tag-manager">
         {error && (
           <MessageCard
             className="tm-error-card"
@@ -284,8 +284,8 @@ export const TagManagerApp: React.FC = () => {
               />
             )}
             {!loading && totalPages > 1 && (
-              <div className="tm-pagination">
-                <span>
+              <div className="tm-pagination" data-testid="pagination">
+                <span data-testid="pagination-status">
                   Page {safePage + 1} of {totalPages}
                   {" "}({filteredTags.length} tag{filteredTags.length !== 1 ? "s" : ""})
                 </span>

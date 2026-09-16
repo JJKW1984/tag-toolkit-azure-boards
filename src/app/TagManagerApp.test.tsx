@@ -237,4 +237,11 @@ describe("TagManagerApp", () => {
       expect(container.querySelector('[data-icon="NumberSymbol"]')).toBeNull();
     });
   });
+
+  it("exposes a root test hook once the hub has rendered", async () => {
+    render(<TagManagerApp />);
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="tag-manager"]')).not.toBeNull()
+    );
+  });
 });

@@ -113,7 +113,8 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
       ]}
       onDismiss={onCancel}
     >
-      <MessageCard severity={MessageCardSeverity.Warning}>
+      <div data-testid="merge-dialog">
+        <MessageCard severity={MessageCardSeverity.Warning}>
         {targetIsSource
           ? `The following tag${remainingSourceCount !== 1 ? "s" : ""} will be merged into the target and removed. The target tag will be kept.`
           : `The following tag${remainingSourceCount !== 1 ? "s" : ""} will be merged into the target and removed from the project.`}
@@ -261,6 +262,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
           </div>
         </div>
       </FormItem>
+      </div>
     </Dialog>
   );
 };

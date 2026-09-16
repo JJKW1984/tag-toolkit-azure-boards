@@ -23,15 +23,17 @@ export const AlphaNav: React.FC<AlphaNavProps> = ({ tags, activeFilter, onFilter
   const availableLetters = LETTERS.filter((l) => available.has(l));
 
   return (
-    <TabBar
-      selectedTabId={activeFilter ?? "all"}
-      onSelectedTabChanged={(id) => onFilter(id === "all" ? null : id)}
-      tabSize={TabSize.Compact}
-    >
-      <Tab id="all" name="All" />
-      {availableLetters.map((letter) => (
-        <Tab key={letter} id={letter} name={letter} />
-      ))}
-    </TabBar>
+    <div data-testid="alpha-nav">
+      <TabBar
+        selectedTabId={activeFilter ?? "all"}
+        onSelectedTabChanged={(id) => onFilter(id === "all" ? null : id)}
+        tabSize={TabSize.Compact}
+      >
+        <Tab id="all" name="All" />
+        {availableLetters.map((letter) => (
+          <Tab key={letter} id={letter} name={letter} />
+        ))}
+      </TabBar>
+    </div>
   );
 };

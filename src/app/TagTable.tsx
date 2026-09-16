@@ -98,16 +98,18 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key={`name-${item.id}`}
         >
-          {onRename ? (
-            <EditableTagName
-              name={item.name}
-              onRename={(newName) => onRename(item.id, newName)}
-              onCancel={() => {}}
-              existingNames={existingNames}
-            />
-          ) : (
-            item.name
-          )}
+          <span data-testid="tag-row" data-tag-name={item.name}>
+            {onRename ? (
+              <EditableTagName
+                name={item.name}
+                onRename={(newName) => onRename(item.id, newName)}
+                onCancel={() => {}}
+                existingNames={existingNames}
+              />
+            ) : (
+              item.name
+            )}
+          </span>
         </SimpleTableCell>
       ),
       readonly: true,
@@ -122,11 +124,13 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key={`count-${item.id}`}
         >
-          {item.count === undefined ? (
-            <span style={{ color: "var(--palette-neutral-30, #aaa)" }}>—</span>
-          ) : (
-            String(item.count)
-          )}
+          <span data-testid="tag-count" data-tag-name={item.name}>
+            {item.count === undefined ? (
+              <span style={{ color: "var(--palette-neutral-30, #aaa)" }}>—</span>
+            ) : (
+              String(item.count)
+            )}
+          </span>
         </SimpleTableCell>
       ),
       readonly: true,
