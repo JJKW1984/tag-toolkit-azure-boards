@@ -1,5 +1,9 @@
 # Live Test Harness — Phase 2 (Playwright UI) Implementation Plan
 
+> **Historical status:** Implemented. The `live-test/ui/` files and the
+> `pnpm live-test:ui` script are present. The unchecked task list below is
+> retained as the original execution record; it is not a current work queue.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Drive the real Tag Toolkit hub, running as the installed `-develop` extension inside a live Azure Boards page, through rename / merge / delete / search / A–Z nav / pagination — covering the React components and pure client-side behaviors that the Phase 1 API harness structurally cannot reach.

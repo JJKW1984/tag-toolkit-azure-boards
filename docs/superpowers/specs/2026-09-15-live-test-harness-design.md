@@ -14,8 +14,11 @@ This spec covers three parts:
 
 ## Status
 
-**Phase 1 and CI integration are built** on `feature/live-test-harness` (30 commits, 286 unit tests,
-both typechecks clean). **Phase 2 (Playwright) is not started.**
+**Phase 1, CI integration, and Phase 2 (Playwright) are built** in the current
+repository. Phase 2 remains local-only and requires an installed development
+extension plus interactive Azure DevOps sign-in. The original implementation
+was completed in 30 commits with 286 unit tests and clean typechecks; use the
+repository's current test counts and scripts as the source of truth.
 
 This document has been updated to describe what was actually built. Several things changed during
 implementation because review found the original design wrong; each is explained where it applies
@@ -103,22 +106,22 @@ was logged.
 
 Sibling to `src/`, **not** included in the webpack bundle or the packaged `.vsix`. Run via `tsx` (new devDependency, added purely for local script execution — no build step needed for this tooling).
 
-| File                             | Responsibility                                                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| File                             | Responsibility                                                                                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cli.ts`                         | Flag parsing (`--org`, `--project`, `--pat`, `--yes`, `--cleanup`, `--cleanup-all`, `--work-item-type`), confirmation prompt, `main()`, dispatch to `runner.ts` |
-| `errors.ts`                      | `NotFoundError` + `isNotFound(e)` — the "already gone" contract cleanup depends on                                                   |
-| `naming.ts`                      | `LIVE_TEST_PREFIX`, `testTag(runId, ability, suffix)`, `newRunId(date)`                                                              |
-| `poll.ts`                        | `pollUntil` with an injectable clock, for Azure DevOps' eventually-consistent reads                                                 |
-| `types.ts`                       | Shared interfaces, incl. the `IAdoClient` seam the real client and the in-memory fake both implement                                 |
-| `adoClient.ts`                   | PAT-authenticated calls: Tags API CRUD, Analytics OData counts, WIT create/get/update/delete/WIQL (via `azure-devops-node-api`)      |
-| `manifest.ts`                    | Read/write `.live-test-runs/<runId>.json`; append-as-created semantics so a crash never loses track of what exists                   |
-| `report.ts`                      | Console table renderer (live per-ability line + summary) and JSON report writer                                                      |
-| `runner.ts`                      | Orchestration: confirm → run abilities sequentially, continue on failure → report → prompt cleanup → cleanup                         |
-| `abilities/listTagsAndCounts.ts` | List-tags + live-count contract                                                                                                      |
-| `abilities/renameTag.ts`         | Rename contract                                                                                                                      |
-| `abilities/mergeTags.ts`         | Multi-source atomic merge contract                                                                                                   |
-| `abilities/deleteTag.ts`         | Delete/cascade contract                                                                                                              |
-| `abilities/pagingVolume.ts`      | List-API-under-volume contract                                                                                                       |
+| `errors.ts`                      | `NotFoundError` + `isNotFound(e)` — the "already gone" contract cleanup depends on                                                                              |
+| `naming.ts`                      | `LIVE_TEST_PREFIX`, `testTag(runId, ability, suffix)`, `newRunId(date)`                                                                                         |
+| `poll.ts`                        | `pollUntil` with an injectable clock, for Azure DevOps' eventually-consistent reads                                                                             |
+| `types.ts`                       | Shared interfaces, incl. the `IAdoClient` seam the real client and the in-memory fake both implement                                                            |
+| `adoClient.ts`                   | PAT-authenticated calls: Tags API CRUD, Analytics OData counts, WIT create/get/update/delete/WIQL (via `azure-devops-node-api`)                                 |
+| `manifest.ts`                    | Read/write `.live-test-runs/<runId>.json`; append-as-created semantics so a crash never loses track of what exists                                              |
+| `report.ts`                      | Console table renderer (live per-ability line + summary) and JSON report writer                                                                                 |
+| `runner.ts`                      | Orchestration: confirm → run abilities sequentially, continue on failure → report → prompt cleanup → cleanup                                                    |
+| `abilities/listTagsAndCounts.ts` | List-tags + live-count contract                                                                                                                                 |
+| `abilities/renameTag.ts`         | Rename contract                                                                                                                                                 |
+| `abilities/mergeTags.ts`         | Multi-source atomic merge contract                                                                                                                              |
+| `abilities/deleteTag.ts`         | Delete/cascade contract                                                                                                                                         |
+| `abilities/pagingVolume.ts`      | List-API-under-volume contract                                                                                                                                  |
 
 Each ability file exports:
 
@@ -184,11 +187,11 @@ its paging, or its case-folding.
 
 Azure DevOps is eventually consistent in more than one place, and the budgets differ by mechanism:
 
-| Read | Budget | Why |
-|---|---|---|
-| Analytics counts (list + counts) | 5 min, 10s interval | Analytics OData ingestion is commonly measured in minutes, not seconds — this is the slowest path and the most likely first-run failure |
-| Tag-delete cascade onto work items | 30s, 2s interval | A different mechanism inside the OLTP store; far faster than Analytics |
-| Rename propagation, merge read-backs | 30s, 2s interval | Structurally identical to the delete cascade, so they share its budget |
+| Read                                 | Budget              | Why                                                                                                                                     |
+| ------------------------------------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Analytics counts (list + counts)     | 5 min, 10s interval | Analytics OData ingestion is commonly measured in minutes, not seconds — this is the slowest path and the most likely first-run failure |
+| Tag-delete cascade onto work items   | 30s, 2s interval    | A different mechanism inside the OLTP store; far faster than Analytics                                                                  |
+| Rename propagation, merge read-backs | 30s, 2s interval    | Structurally identical to the delete cascade, so they share its budget                                                                  |
 
 A timeout is reported as a `fail` with the last observed value and elapsed time, never a hang.
 
