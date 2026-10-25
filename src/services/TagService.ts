@@ -5,6 +5,7 @@ import { WorkItemTrackingRestClient } from "azure-devops-extension-api/WorkItemT
 import { CommonServiceIds, IProjectPageService } from "azure-devops-extension-api/Common/CommonServices";
 import { WorkItemBatchGetRequest } from "azure-devops-extension-api/WorkItemTracking";
 import { sanitizeError } from "../utils/sanitizeError";
+import { joinTags, parseTags } from "../utils/tagString";
 import {
   TagItem,
   TagOperationResult,
@@ -12,16 +13,6 @@ import {
   MergeSourceResult,
   MergeSourceFailure,
 } from "../types";
-
-// ADO stores tags as a semicolon+space separated string: "bug; frontend; P1"
-function parseTags(raw: string): string[] {
-  if (!raw) return [];
-  return raw.split(";").map((t) => t.trim()).filter(Boolean);
-}
-
-function joinTags(tags: string[]): string {
-  return tags.join("; ");
-}
 
 export class TagService {
   private async getProject(): Promise<string> {

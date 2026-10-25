@@ -11,6 +11,9 @@ on:
     branches:
       - main
       - dev
+  push:
+    branches:
+      - dev
 
 permissions:
   contents: read
@@ -39,16 +42,7 @@ jobs:
       - id: resolve-manifest
         name: Resolve manifest and extension ID
         shell: bash
-        run: |
-          TARGET="${{ github.base_ref }}"
-          if [[ -z "$TARGET" ]]; then TARGET="${{ github.ref_name }}"; fi
-          if [[ "$TARGET" == "main" ]]; then
-            echo "extension-id=tag-toolkit-azure-boards"        >> "$GITHUB_OUTPUT"
-            echo "manifest-file=vss-extension.json"    >> "$GITHUB_OUTPUT"
-          else
-            echo "extension-id=tag-toolkit-azure-boards-develop"   >> "$GITHUB_OUTPUT"
-            echo "manifest-file=vss-extension-dev.json"   >> "$GITHUB_OUTPUT"
-          fi
+        run: bash scripts/resolve-manifest.sh "${{ github.base_ref }}" "${{ github.ref_name }}"
 
       - name: Install dependencies
         run: pnpm install
@@ -118,4 +112,14 @@ jobs:
         with:
           auth-type: pat
           token: ${{ secrets.MARKETPLACE_TOKEN }}
-          vsix-file: ${{ steps.package.outputs.vsix-file }} 
+          vsix-file: ${{ steps.package.outputs.vsix-file }}
+
+      - name: Share with organizations
+        if: steps.resolve-manifest.outputs.path == 'share' && vars.SHARE_ACCOUNTS != ''
+        uses: jessehouwing/azdo-marketplace/share@main
+        with:
+          auth-type: pat
+          token: ${{ secrets.MARKETPLACE_TOKEN }}
+          publisher-id: ${{ env.PUBLISHER_ID }}
+          extension-id: ${{ steps.resolve-manifest.outputs.extension-id }}
+          accounts: ${{ vars.SHARE_ACCOUNTS }}
