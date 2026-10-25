@@ -46,3 +46,9 @@
 .tm-last-updated {
   color: var(--palette-neutral-40, #888);
 }
+
+.tm-refresh-stats {
+  color: var(--palette-neutral-40, #888);
+  font-size: 12px;
+  cursor: help;
+}

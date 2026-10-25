@@ -19,6 +19,22 @@ export interface TagOperationResult {
 export interface TagCountCache {
   counts: Record<string, number>;  // tag name (lowercase) → work item count
   lastUpdated: string;              // ISO 8601 timestamp
+  stats?: RefreshStats;             // how the last successful refresh ran (absent on older caches)
+}
+
+/** Diagnostics for one successful count refresh, so the field behaviour of the strategy is visible. */
+export interface RefreshStats {
+  /** "aggregate" = server-side groupby by TagNames; "crawl" = paged $expand fallback. */
+  strategy: "aggregate" | "crawl";
+  /** HTTP requests issued, including throttle retries and a rejected aggregate attempt. */
+  requests: number;
+  /** Throttle (429/503) retries. */
+  retries: number;
+  /** Rows read from the winning strategy: tag-set groups (aggregate) or work items (crawl). */
+  rows: number;
+  durationMs: number;
+  /** Why the aggregate was abandoned, when strategy is "crawl". Sanitized. */
+  fallbackReason?: string;
 }
 
 /** One source tag successfully merged into the target. */

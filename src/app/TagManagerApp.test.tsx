@@ -19,7 +19,7 @@ const mockTagCountCacheService = {
   setCache: jest.fn(),
   fetchCounts: jest.fn(),
   refreshCache: jest.fn(),
-  isStaleCacheOrMissing: jest.fn(),
+  shouldAutoRefresh: jest.fn(),
 };
 
 jest.mock("../services/TagCountCacheService", () => ({
@@ -44,7 +44,7 @@ describe("TagManagerApp", () => {
 
     // Default: no cache, not stale (no auto-refresh)
     mockTagCountCacheService.getCache.mockResolvedValue(null);
-    mockTagCountCacheService.isStaleCacheOrMissing.mockReturnValue(false);
+    mockTagCountCacheService.shouldAutoRefresh.mockResolvedValue(false);
     mockTagCountCacheService.refreshCache.mockResolvedValue({
       counts: {},
       lastUpdated: new Date().toISOString(),
@@ -162,6 +162,73 @@ describe("TagManagerApp", () => {
     expect(screen.getByText(/Last updated:/)).toBeInTheDocument();
   });
 
+  describe("last refresh diagnostics", () => {
+    const withStats = (stats: Record<string, unknown> | undefined) => {
+      mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "bug", url: "u" }]);
+      mockTagCountCacheService.getCache.mockResolvedValue({
+        counts: { bug: 1 },
+        lastUpdated: "2026-04-26T10:00:00.000Z",
+        stats,
+      });
+    };
+
+    it("summarizes the strategy, requests, rows and duration of the last refresh", async () => {
+      withStats({ strategy: "aggregate", requests: 3, retries: 1, rows: 1200, durationMs: 8400 });
+
+      render(<TagManagerApp />);
+
+      const stats = await screen.findByTestId("refresh-stats");
+      expect(stats).toHaveTextContent("Aggregate");
+      expect(stats).toHaveTextContent("3 requests");
+      expect(stats).toHaveTextContent(/1[,.\s\u202f\u00a0]?200 rows/);
+      expect(stats).toHaveTextContent("8.4s");
+      expect(stats).toHaveAttribute("title", expect.stringContaining("1 throttle retry"));
+    });
+
+    it("labels the crawl fallback and exposes the reason on hover", async () => {
+      withStats({
+        strategy: "crawl",
+        requests: 2,
+        retries: 0,
+        rows: 50000,
+        durationMs: 120000,
+        fallbackReason: "Analytics OData: 400 bad $apply",
+      });
+
+      render(<TagManagerApp />);
+
+      const stats = await screen.findByTestId("refresh-stats");
+      expect(stats).toHaveTextContent("Crawl (fallback)");
+      expect(stats).toHaveAttribute("title", expect.stringContaining("400 bad $apply"));
+    });
+
+    it("renders nothing for caches written before stats existed", async () => {
+      withStats(undefined);
+
+      render(<TagManagerApp />);
+
+      await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+      expect(screen.queryByTestId("refresh-stats")).not.toBeInTheDocument();
+    });
+
+    it("updates after a manual refresh", async () => {
+      mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "ops", url: "u" }]);
+      mockTagCountCacheService.refreshCache.mockResolvedValue({
+        counts: { ops: 5 },
+        lastUpdated: new Date().toISOString(),
+        stats: { strategy: "aggregate", requests: 7, retries: 0, rows: 40, durationMs: 900 },
+      });
+
+      render(<TagManagerApp />);
+      await waitFor(() => expect(screen.getByText("ops")).toBeInTheDocument());
+      expect(screen.queryByTestId("refresh-stats")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Refresh Counts" }));
+
+      expect(await screen.findByTestId("refresh-stats")).toHaveTextContent("7 requests");
+    });
+  });
+
   it("clicking Refresh Counts calls refreshCache and updates counts", async () => {
     mockTagService.getAllTags.mockResolvedValue([
       { id: "1", name: "ops", url: "u" },
@@ -190,7 +257,7 @@ describe("TagManagerApp", () => {
     mockTagService.getAllTags.mockResolvedValue([
       { id: "1", name: "infra", url: "u" },
     ]);
-    mockTagCountCacheService.isStaleCacheOrMissing.mockReturnValue(true);
+    mockTagCountCacheService.shouldAutoRefresh.mockResolvedValue(true);
     mockTagCountCacheService.refreshCache.mockResolvedValue({
       counts: { infra: 13 },
       lastUpdated: new Date().toISOString(),

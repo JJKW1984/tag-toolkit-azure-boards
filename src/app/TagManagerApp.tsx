@@ -11,7 +11,7 @@ import { ButtonGroup } from "azure-devops-ui/ButtonGroup";
 import { TagService } from "../services/TagService";
 import * as SDK from "azure-devops-extension-sdk";
 import { TagCountCacheService } from "../services/TagCountCacheService";
-import { TagItem } from "../types";
+import { RefreshStats, TagItem } from "../types";
 import { TagTable } from "./TagTable";
 import { AlphaNav } from "./AlphaNav";
 import { DeleteDialog } from "./DeleteDialog";
@@ -29,6 +29,34 @@ const tagService = new TagService();
 const tagCountCacheService = new TagCountCacheService();
 const PAGE_SIZE = 25;
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+}
+
+const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+
+/** One-line summary of the last refresh plus a fuller tooltip, for diagnosing slow or fallback runs. */
+function describeRefresh(stats: RefreshStats): { summary: string; detail: string } {
+  const strategy = stats.strategy === "aggregate" ? "Aggregate" : "Crawl (fallback)";
+  const summary = [
+    strategy,
+    plural(stats.requests, "request"),
+    plural(stats.rows, "row"),
+    formatDuration(stats.durationMs),
+  ].join(" · ");
+  const detail = [
+    summary,
+    `${stats.retries.toLocaleString()} throttle ${stats.retries === 1 ? "retry" : "retries"}`,
+    stats.fallbackReason ? `Aggregate rejected: ${stats.fallbackReason}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return { summary, detail };
+}
+
 export const TagManagerApp: React.FC = () => {
   const [tags, setTags] = useState<TagItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +67,7 @@ export const TagManagerApp: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [lastStats, setLastStats] = useState<RefreshStats | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const tagsRef = useRef<TagItem[]>([]);
 
@@ -70,6 +99,7 @@ export const TagManagerApp: React.FC = () => {
         prev.map((t) => ({ ...t, count: cache.counts[t.name.toLowerCase()] ?? 0 }))
       );
       setLastUpdated(cache.lastUpdated);
+      setLastStats(cache.stats ?? null);
     } catch (e) {
       setError(sanitizeError(e));
     } finally {
@@ -91,11 +121,18 @@ export const TagManagerApp: React.FC = () => {
         ? result.map((t) => ({ ...t, count: cache.counts[t.name.toLowerCase()] ?? 0 }))
         : result;
       setTags(tagsWithCounts);
-      if (cache) setLastUpdated(cache.lastUpdated);
-      setSelectedIds(new Set());
-      if (tagCountCacheService.isStaleCacheOrMissing(cache)) {
-        void triggerBackgroundRefresh();
+      if (cache) {
+        setLastUpdated(cache.lastUpdated);
+        setLastStats(cache.stats ?? null);
       }
+      setSelectedIds(new Set());
+      // Not awaited: the cooldown lookup is one more storage read the table need not wait on.
+      void tagCountCacheService
+        .shouldAutoRefresh(cache)
+        .then((refresh) => {
+          if (refresh) void triggerBackgroundRefresh();
+        })
+        .catch((e) => setError(sanitizeError(e)));
     } catch (e) {
       setError(sanitizeError(e));
     } finally {
@@ -259,6 +296,15 @@ export const TagManagerApp: React.FC = () => {
                 Last updated:{" "}
                 {lastUpdated ? new Date(lastUpdated).toLocaleString() : "Never"}
               </span>
+              {lastStats && (
+                <span
+                  className="tm-refresh-stats"
+                  data-testid="refresh-stats"
+                  title={describeRefresh(lastStats).detail}
+                >
+                  {describeRefresh(lastStats).summary}
+                </span>
+              )}
               {isRefreshing && (
                 <Spinner size={SpinnerSize.small} label="Refreshing…" />
               )}
