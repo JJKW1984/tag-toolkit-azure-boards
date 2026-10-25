@@ -4,10 +4,15 @@
 const PREFIX = "[TagToolkit]";
 const DEBUG_FLAG = "tagToolkitDebug";
 
+// Structural type so this file compiles under tsconfigs that lack the DOM lib
+// (tsconfig.live-test.json includes src/utils).
+type StorageLike = { getItem(key: string): string | null };
+
 /** Verbose per-request logging; opt in per browser with localStorage.tagToolkitDebug = "1". */
 export function isDebugEnabled(): boolean {
   try {
-    return window.localStorage.getItem(DEBUG_FLAG) === "1";
+    const storage = (globalThis as { localStorage?: StorageLike }).localStorage;
+    return storage?.getItem(DEBUG_FLAG) === "1";
   } catch {
     // Storage can throw in private windows or with site data blocked.
     return false;

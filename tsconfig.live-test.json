@@ -10,5 +10,7 @@
     "types": ["node", "jest"],
     "noEmit": true
   },
-  "include": ["live-test/**/*", "src/utils/**/*", "src/types/**/*"]
+  "include": ["live-test/**/*", "src/utils/**/*", "src/types/**/*"],
+  // jsdom/localStorage test for the extension jest project; needs DOM types this config omits.
+  "exclude": ["src/utils/debugLog.test.ts"]
 }
