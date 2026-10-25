@@ -274,4 +274,8 @@ export const Pill: React.FC<
     iconProps?: { iconName: string };
     className?: string;
   }>
-> = ({ children }) => <span data-testid="pill">{children}</span>;
+> = ({ children, variant, iconProps }) => (
+  <span data-testid="pill" data-variant={variant} data-icon={iconProps?.iconName}>
+    {children}
+  </span>
+);
