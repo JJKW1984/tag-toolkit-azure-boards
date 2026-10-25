@@ -96,3 +96,32 @@ describe("TagTable — rename wiring", () => {
     expect(onRename).toHaveBeenCalledWith("tag-1", "beta");
   });
 });
+
+it("exposes a test hook per row carrying the tag name", () => {
+  render(
+    <TagTable
+      tags={[{ id: "1", name: "alpha", url: "" }]}
+      selectedIds={new Set()}
+      onToggle={() => {}}
+      onToggleAll={() => {}}
+    />
+  );
+
+  const row = document.querySelector('[data-testid="tag-row"]');
+  expect(row).not.toBeNull();
+  expect(row?.getAttribute("data-tag-name")).toBe("alpha");
+});
+
+it("exposes a test hook per count cell carrying the tag name", () => {
+  render(
+    <TagTable
+      tags={[{ id: "1", name: "alpha", url: "", count: 4 }]}
+      selectedIds={new Set()}
+      onToggle={() => {}}
+      onToggleAll={() => {}}
+    />
+  );
+
+  const cell = document.querySelector('[data-testid="tag-count"][data-tag-name="alpha"]');
+  expect(cell?.textContent).toBe("4");
+});

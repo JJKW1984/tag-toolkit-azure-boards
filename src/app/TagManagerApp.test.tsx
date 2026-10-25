@@ -7,6 +7,7 @@ const mockTagService = {
   deleteTagById: jest.fn(),
   renameTagById: jest.fn(),
   mergeTag: jest.fn(),
+  mergeTags: jest.fn(),
 };
 
 jest.mock("../services/TagService", () => ({
@@ -39,6 +40,7 @@ describe("TagManagerApp", () => {
       affectedCount: 1,
       workItemIds: [1],
     });
+    mockTagService.mergeTags.mockResolvedValue({ succeeded: [], failed: [] });
 
     // Default: no cache, not stale (no auto-refresh)
     mockTagCountCacheService.getCache.mockResolvedValue(null);
@@ -85,6 +87,39 @@ describe("TagManagerApp", () => {
     expect(mergeIndex).toBeGreaterThan(-1);
     expect(deleteIndex).toBeGreaterThan(-1);
     expect(mergeIndex).toBeLessThan(deleteIndex);
+  });
+
+  it("excludes the tag selected as target from the sources sent to mergeTags", async () => {
+    mockTagService.getAllTags.mockResolvedValue([
+      { id: "1", name: "one", url: "u" },
+      { id: "2", name: "two", url: "u" },
+    ]);
+
+    render(<TagManagerApp />);
+
+    await waitFor(() => {
+      expect(screen.getByText("one")).toBeInTheDocument();
+    });
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[1]); // row for "one"
+    fireEvent.click(checkboxes[2]); // row for "two"
+
+    fireEvent.click(screen.getByRole("button", { name: /^Merge/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "one" }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+
+    await waitFor(() => {
+      expect(mockTagService.mergeTags).toHaveBeenCalledWith(
+        [{ id: "2", name: "two", url: "u" }],
+        "one"
+      );
+    });
   });
 
   it("shows an error card when loading fails", async () => {
@@ -201,5 +236,12 @@ describe("TagManagerApp", () => {
       expect(container.querySelector('[data-icon="BranchMerge"]')).not.toBeNull();
       expect(container.querySelector('[data-icon="NumberSymbol"]')).toBeNull();
     });
+  });
+
+  it("exposes a root test hook once the hub has rendered", async () => {
+    render(<TagManagerApp />);
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="tag-manager"]')).not.toBeNull()
+    );
   });
 });

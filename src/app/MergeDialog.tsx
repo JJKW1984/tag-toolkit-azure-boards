@@ -38,10 +38,16 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
 
   const isNewTag =
     trimmed.length > 0 &&
-    !allTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+    !allTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase()) &&
+    !sources.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
 
   const totalItems = suggestions.length + (isNewTag ? 1 : 0);
-  const isValid = trimmed.length > 0;
+
+  const targetIsSource = sources.some(
+    (t) => t.name.toLowerCase() === trimmed.toLowerCase()
+  );
+  const remainingSourceCount = targetIsSource ? sources.length - 1 : sources.length;
+  const isValid = trimmed.length > 0 && remainingSourceCount > 0;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTargetName(e.target.value);
@@ -51,6 +57,25 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
   const selectSuggestion = (name: string) => {
     setTargetName(name);
     setHighlightedIndex(-1);
+  };
+
+  const handlePillClick = (name: string) => {
+    if (trimmed.toLowerCase() === name.toLowerCase()) {
+      setTargetName("");
+      setHighlightedIndex(-1);
+    } else {
+      selectSuggestion(name);
+    }
+  };
+
+  const handlePillKeyDown = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+    name: string
+  ) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handlePillClick(name);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -88,9 +113,11 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
       ]}
       onDismiss={onCancel}
     >
-      <MessageCard severity={MessageCardSeverity.Warning}>
-        The following tag{sources.length !== 1 ? "s" : ""} will be merged into
-        the target and removed from the project.
+      <div data-testid="merge-dialog">
+        <MessageCard severity={MessageCardSeverity.Warning}>
+        {targetIsSource
+          ? `The following tag${remainingSourceCount !== 1 ? "s" : ""} will be merged into the target and removed. The target tag will be kept.`
+          : `The following tag${remainingSourceCount !== 1 ? "s" : ""} will be merged into the target and removed from the project.`}
       </MessageCard>
       <div
         style={{
@@ -102,19 +129,36 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
           margin: "12px 0 8px",
         }}
       >
-        {sources.length} tag{sources.length !== 1 ? "s" : ""} will be merged
+        {remainingSourceCount} tag{remainingSourceCount !== 1 ? "s" : ""} will be merged
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "0 0 16px" }}>
-        {sources.map((t) => (
-          <Pill
-            key={t.id}
-            size={PillSize.regular}
-            variant={PillVariant.outlined}
-            iconProps={{ iconName: "Tag" }}
-          >
-            {t.name}
-          </Pill>
-        ))}
+        {sources.map((t) => {
+          const isTarget = t.name.toLowerCase() === trimmed.toLowerCase();
+          return (
+            <div
+              key={t.id}
+              role="button"
+              aria-pressed={isTarget}
+              tabIndex={0}
+              onClick={() => handlePillClick(t.name)}
+              onKeyDown={(e) => handlePillKeyDown(e, t.name)}
+              title={
+                isTarget
+                  ? "Target — other tags will be merged into this one"
+                  : undefined
+              }
+              style={{ cursor: "pointer", display: "inline-flex" }}
+            >
+              <Pill
+                size={PillSize.regular}
+                variant={isTarget ? PillVariant.standard : PillVariant.outlined}
+                iconProps={{ iconName: isTarget ? "CheckMark" : "Tag" }}
+              >
+                {t.name}
+              </Pill>
+            </div>
+          );
+        })}
       </div>
       <FormItem label="Target tag">
         <div>
@@ -218,6 +262,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
           </div>
         </div>
       </FormItem>
+      </div>
     </Dialog>
   );
 };
