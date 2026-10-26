@@ -60,6 +60,25 @@ describe("pollUntil", () => {
     expect(result.elapsedMs).toBeGreaterThanOrEqual(6000);
   });
 
+  it("gives up cleanly when the budget runs out between the post-sleep check and the next probe", async () => {
+    // The clock ticks on every read, so the post-sleep guard sees 9ms elapsed of
+    // a 10ms budget and the next read, inside the probe, sees the budget gone.
+    let current = 0;
+    const probe = jest.fn(async () => 1);
+
+    const result = await pollUntil({
+      probe,
+      until: (v) => v === 3,
+      timeoutMs: 10,
+      intervalMs: 1,
+      now: () => current++,
+      sleep: async () => undefined,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.last).toBe(1);
+  });
+
   it("propagates a probe error instead of swallowing it", async () => {
     const clock = fakeClock();
     const probe = jest.fn(async () => {

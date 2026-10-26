@@ -35,8 +35,7 @@ export async function pollUntil<T>(opts: PollOptions<T>): Promise<PollResult<T>>
   const start = now();
   let attempts = 0;
 
-  const probeWithinBudget = async (): Promise<T> => {
-    const remainingMs = timeoutMs - (now() - start);
+  const probeWithinBudget = async (remainingMs: number): Promise<T> => {
     if (remainingMs <= 0) throw timeoutError(0);
     const limitMs = Math.min(probeTimeoutMs ?? remainingMs, remainingMs);
     let timer: NodeJS.Timeout | undefined;
@@ -50,7 +49,7 @@ export async function pollUntil<T>(opts: PollOptions<T>): Promise<PollResult<T>>
     }
   };
 
-  let last = await probeWithinBudget();
+  let last = await probeWithinBudget(timeoutMs - (now() - start));
   attempts += 1;
 
   while (!opts.until(last)) {
@@ -58,10 +57,13 @@ export async function pollUntil<T>(opts: PollOptions<T>): Promise<PollResult<T>>
       return { ok: false, last, elapsedMs: now() - start, attempts };
     }
     await sleep(intervalMs);
-    if (now() - start >= timeoutMs) {
-      return { ok: false, last, elapsedMs: now() - start, attempts };
+    // One clock read feeds both the give-up check and the probe's budget, so the
+    // budget cannot run out between the two and surface as a probe timeout.
+    const elapsedMs = now() - start;
+    if (elapsedMs >= timeoutMs) {
+      return { ok: false, last, elapsedMs, attempts };
     }
-    last = await probeWithinBudget();
+    last = await probeWithinBudget(timeoutMs - elapsedMs);
     attempts += 1;
   }
 
