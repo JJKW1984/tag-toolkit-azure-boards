@@ -192,8 +192,9 @@ Recommended rollout:
 ## Automated publishing
 
 `.github/workflows/build.yml` builds and tests pull requests targeting `main` or
-`dev`, pushes to `dev`, and manual dispatches. The workflow selects the
-manifest from the target branch:
+`dev`, pushes to `main` or `dev`, and manual dispatches. Pull requests stop
+after packaging the VSIX; only pushes (including merges) and manual dispatches
+publish. The workflow selects the manifest from the target branch:
 
 - `main`: public manifest `vss-extension.json`, then marketplace publish.
 - Any other target: private manifest `vss-extension-dev.json`, then marketplace
@@ -201,7 +202,7 @@ manifest from the target branch:
   repository/environment variable.
 
 The workflow requires `PUBLISHER_ID` and `MARKETPLACE_TOKEN` to be configured
-in the repository or organization settings. It uses Node 24 and pnpm 9.
+in the repository or organization settings. It uses Node 24 and pnpm 12.
 
 ## Live Testing
 
@@ -296,8 +297,9 @@ only thing standing between a mistyped variable and churn in a real project.
 ## Continuous Integration Quality Gates
 
 GitHub Actions is defined in `.github/workflows/`. The build workflow installs
-dependencies, builds, runs the Jest suite, packages a VSIX, and publishes or
-shares it according to the target branch. The live-test workflow is manual and
+dependencies, builds, runs the Jest suite, packages a VSIX, and (on pushes and
+manual dispatches, not pull requests) publishes or shares it according to the
+target branch. The live-test workflow is manual and
 requires the protected `live-test` environment; it runs the API harness and
 always attempts cleanup.
 
