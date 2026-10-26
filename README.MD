@@ -60,7 +60,7 @@ For Marketplace listing content, see [`overview.md`](overview.md). For an index 
 Install the following before local development:
 
 1. Node.js 24 (the CI and live-test harness target)
-2. pnpm 9
+2. pnpm, installed via [mise](https://mise.jdx.dev/) from `mise.toml` (CI uses pnpm 12)
 3. Azure DevOps organization for extension testing
 4. Azure DevOps Personal Access Token (PAT) for publishing or live testing
 5. Visual Studio Marketplace publisher account (for packaging/publishing)
@@ -72,6 +72,7 @@ Install the following before local development:
 ```bash
 git clone https://github.com/JJKW1984/tagtidy-azure-boards.git
 cd tagtidy-azure-boards
+mise install
 pnpm install
 ```
 
