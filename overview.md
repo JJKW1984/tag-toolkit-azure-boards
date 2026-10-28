@@ -21,7 +21,7 @@ The tag list is searchable and filterable so you can quickly find what you need:
 
 ## Safe by Design
 
-Every destructive operation (merge, delete) shows a confirmation dialog before anything changes. You see exactly which tags will be affected before you commit. Counts may be up to 24 hours old until you use **Refresh Counts**.
+Every destructive operation (merge, delete) shows a confirmation dialog before anything changes. You see exactly which tags will be affected before you commit. Counts may be up to 24 hours old until you use **Refresh counts**.
 
 Rename operations apply immediately inline — useful for quick corrections without needing to open a dialog.
 

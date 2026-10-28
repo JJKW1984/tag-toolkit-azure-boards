@@ -25,7 +25,7 @@ export const DeleteDialog: React.FC<DeleteDialogProps> = ({
 }) => {
   return (
     <Dialog
-      titleProps={{ text: "Delete Tags" }}
+      titleProps={{ text: "Delete tags" }}
       footerButtonProps={[
         { text: "Cancel", onClick: onCancel, disabled: Boolean(busyLabel) },
         {
@@ -52,7 +52,7 @@ export const DeleteDialog: React.FC<DeleteDialogProps> = ({
             fontWeight: 600,
             textTransform: "uppercase",
             letterSpacing: "0.5px",
-            color: "var(--palette-neutral-60, #666)",
+            color: "var(--tm-text-secondary)",
             margin: "12px 0 8px",
           }}
         >

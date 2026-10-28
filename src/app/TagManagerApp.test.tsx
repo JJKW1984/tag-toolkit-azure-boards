@@ -51,7 +51,7 @@ describe("TagManagerApp", () => {
     });
   });
 
-  it("loads tags and renders Delete, Merge, and Refresh Counts buttons", async () => {
+  it("loads tags and renders Delete, Merge, and Refresh counts buttons", async () => {
     mockTagService.getAllTags.mockResolvedValue([
       { id: "1", name: "alpha", url: "u" },
       { id: "2", name: "beta", url: "u" },
@@ -67,7 +67,7 @@ describe("TagManagerApp", () => {
 
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Merge" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Refresh Counts" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh counts" })).not.toBeDisabled();
     expect(screen.queryByRole("button", { name: /^Count/ })).toBeNull();
   });
 
@@ -258,13 +258,13 @@ describe("TagManagerApp", () => {
       await waitFor(() => expect(screen.getByText("ops")).toBeInTheDocument());
       expect(screen.queryByTestId("refresh-stats")).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: "Refresh Counts" }));
+      fireEvent.click(screen.getByRole("button", { name: "Refresh counts" }));
 
       expect(await screen.findByTestId("refresh-stats")).toHaveTextContent("7 requests");
     });
   });
 
-  it("clicking Refresh Counts calls refreshCache and updates counts", async () => {
+  it("clicking Refresh counts calls refreshCache and updates counts", async () => {
     mockTagService.getAllTags.mockResolvedValue([
       { id: "1", name: "ops", url: "u" },
     ]);
@@ -279,7 +279,7 @@ describe("TagManagerApp", () => {
       expect(screen.getByText("ops")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh Counts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh counts" }));
 
     await waitFor(() => {
       expect(screen.getByText("99")).toBeInTheDocument();

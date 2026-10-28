@@ -146,7 +146,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
 
   return (
     <Dialog
-      titleProps={{ text: "Merge Tags" }}
+      titleProps={{ text: "Merge tags" }}
       footerButtonProps={[
         { text: "Cancel", onClick: onCancel, disabled: Boolean(busyLabel) },
         {
@@ -170,7 +170,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
           fontWeight: 600,
           textTransform: "uppercase",
           letterSpacing: "0.5px",
-          color: "var(--palette-neutral-60, #666)",
+          color: "var(--tm-text-secondary)",
           margin: "12px 0 8px",
         }}
       >
@@ -222,20 +222,20 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
               padding: "4px 8px",
               fontSize: "14px",
               lineHeight: "20px",
-              border: "1px solid var(--palette-neutral-20, #c8c6c4)",
+              border: "1px solid var(--tm-border)",
               borderRadius: "2px 2px 0 0",
               borderBottom: "none",
-              background: "var(--callout-background-color, #fff)",
+              background: "var(--tm-surface)",
               color: "var(--text-primary-color, #1e1e1e)",
               outline: "none",
             }}
           />
           <div
             style={{
-              border: "1px solid var(--palette-neutral-20, #c8c6c4)",
+              border: "1px solid var(--tm-border)",
               borderTop: "none",
               borderRadius: "0 0 2px 2px",
-              background: "var(--callout-background-color, #fff)",
+              background: "var(--tm-surface)",
               maxHeight: "160px",
               overflowY: "auto",
             }}
@@ -250,7 +250,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                   cursor: "pointer",
                   background:
                     index === highlightedIndex
-                      ? "var(--palette-neutral-8, #e8e8e8)"
+                      ? "var(--tm-hover)"
                       : "transparent",
                 }}
               >
@@ -272,11 +272,11 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                   cursor: "pointer",
                   background:
                     highlightedIndex === suggestions.length
-                      ? "var(--palette-neutral-8, #e8e8e8)"
+                      ? "var(--tm-hover)"
                       : "transparent",
                   borderTop:
                     suggestions.length > 0
-                      ? "1px solid var(--palette-neutral-10, #e0e0e0)"
+                      ? "1px solid var(--tm-divider)"
                       : "none",
                   display: "flex",
                   alignItems: "center",
@@ -295,7 +295,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                   style={{
                     fontSize: "11px",
                     color: "var(--communication-foreground, #0078d4)",
-                    background: "var(--palette-primary-tint-10, #deecf9)",
+                    background: "var(--tm-accent-tint)",
                     borderRadius: "10px",
                     padding: "1px 7px",
                     fontWeight: 600,

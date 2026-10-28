@@ -370,7 +370,6 @@ export const TagManagerApp: React.FC = () => {
       <div className="page-content" data-testid="tag-manager">
         {error && (
           <MessageCard
-            className="tm-error-card"
             severity={MessageCardSeverity.Error}
             onDismiss={() => setError(null)}
           >
@@ -389,7 +388,7 @@ export const TagManagerApp: React.FC = () => {
               <span className="tm-last-updated">
                 {lastUpdated
                   ? `Last updated: ${new Date(lastUpdated).toLocaleString()}`
-                  : "Counts haven't loaded yet. Select Refresh Counts to load them."}
+                  : "Counts haven't loaded yet. Select Refresh counts to load them."}
               </span>
               {lastStats && (
                 <span
@@ -404,11 +403,23 @@ export const TagManagerApp: React.FC = () => {
                 <Spinner size={SpinnerSize.small} label="Refreshing…" />
               )}
               <Button
-                text="Refresh Counts"
+                text="Refresh counts"
                 iconProps={{ iconName: "Refresh" }}
                 disabled={isRefreshing}
                 onClick={() => void triggerBackgroundRefresh()}
               />
+              {/* In the refresh row, whose height the button already sets, so it never moves the table. */}
+              <div className="tm-selection-status" role="status">
+                {n > 0 && (
+                  <>
+                    <span data-testid="selection-status">
+                      {plural(n, "tag")} selected
+                      {selectedNotShown > 0 && ` · ${selectedNotShown.toLocaleString()} not shown`}
+                    </span>
+                    <Button subtle={true} text="Clear selection" onClick={handleClearSelection} />
+                  </>
+                )}
+              </div>
             </div>
             {loading ? (
               <div className="tm-spinner-wrapper">
@@ -426,44 +437,28 @@ export const TagManagerApp: React.FC = () => {
                 onClearFilters={handleClearFilters}
               />
             )}
-            {!loading && (
-              <div className="tm-footer">
-                {/* Below the table, so it appearing never moves the rows under the pointer. */}
-                <div className="tm-selection-status" role="status">
-                  {n > 0 && (
-                    <>
-                      <span data-testid="selection-status">
-                        {plural(n, "tag")} selected
-                        {selectedNotShown > 0 && ` · ${selectedNotShown.toLocaleString()} not shown`}
-                      </span>
-                      <Button subtle={true} text="Clear selection" onClick={handleClearSelection} />
-                    </>
-                  )}
-                </div>
-                {totalPages > 1 && (
-                  <div className="tm-pagination" data-testid="pagination">
-                    <span data-testid="pagination-status">
-                      Page {safePage + 1} of {totalPages}
-                      {" "}({filteredTags.length} tag{filteredTags.length !== 1 ? "s" : ""})
-                    </span>
-                    <ButtonGroup>
-                      <Button
-                        subtle={true}
-                        text="Previous"
-                        iconProps={{ iconName: "ChevronLeft" }}
-                        disabled={safePage === 0}
-                        onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                      />
-                      <Button
-                        subtle={true}
-                        text="Next"
-                        iconProps={{ iconName: "ChevronRight" }}
-                        disabled={safePage >= totalPages - 1}
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-                      />
-                    </ButtonGroup>
-                  </div>
-                )}
+            {!loading && totalPages > 1 && (
+              <div className="tm-pagination" data-testid="pagination">
+                <span data-testid="pagination-status">
+                  Page {safePage + 1} of {totalPages}
+                  {" "}({filteredTags.length} tag{filteredTags.length !== 1 ? "s" : ""})
+                </span>
+                <ButtonGroup>
+                  <Button
+                    subtle={true}
+                    text="Previous"
+                    iconProps={{ iconName: "ChevronLeft" }}
+                    disabled={safePage === 0}
+                    onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                  />
+                  <Button
+                    subtle={true}
+                    text="Next"
+                    iconProps={{ iconName: "ChevronRight" }}
+                    disabled={safePage >= totalPages - 1}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                  />
+                </ButtonGroup>
               </div>
             )}
           </div>

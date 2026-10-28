@@ -122,7 +122,7 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
         >
           <span data-testid="tag-count" data-tag-name={item.name}>
             {item.count === undefined ? (
-              <span style={{ color: "var(--palette-neutral-30, #aaa)" }}>—</span>
+              <span className="tm-count-unknown" role="img" aria-label="Count not loaded">—</span>
             ) : (
               String(item.count)
             )}

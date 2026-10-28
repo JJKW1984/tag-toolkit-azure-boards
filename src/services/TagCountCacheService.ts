@@ -246,7 +246,7 @@ export class TagCountCacheService {
   /**
    * Whether the hub should kick off a background refresh on load: the cache is
    * stale or missing AND no refresh has failed since the last success within
-   * the cooldown. The manual "Refresh Counts" button bypasses this.
+   * the cooldown. The manual "Refresh counts" button bypasses this.
    */
   async shouldAutoRefresh(cache: TagCountCache | null): Promise<boolean> {
     if (!this.isStaleCacheOrMissing(cache)) return false;
