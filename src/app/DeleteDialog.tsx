@@ -1,5 +1,5 @@
 // src/app/DeleteDialog.tsx
-import React from "react";
+import React, { useEffect } from "react";
 import { Dialog } from "azure-devops-ui/Dialog";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 import { Pill, PillSize, PillVariant } from "azure-devops-ui/Pill";
@@ -16,6 +16,9 @@ interface DeleteDialogProps {
   onCancel: () => void;
 }
 
+// A class, not an id: the Button namespaces ids, so an id selector would match nothing.
+const CANCEL_CLASS = "tm-delete-cancel";
+
 export const DeleteDialog: React.FC<DeleteDialogProps> = ({
   tags,
   countsUpdatedAt,
@@ -23,11 +26,30 @@ export const DeleteDialog: React.FC<DeleteDialogProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const busy = Boolean(busyLabel);
+
+  // Focus starts on Cancel, but a focused ADO Button swallows Escape (it blurs itself and stops
+  // the event), so the Dialog's own escDismiss never fires from there. Listen in the capture
+  // phase instead, ahead of the Button.
+  useEffect(() => {
+    if (busy) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [busy, onCancel]);
+
   return (
     <Dialog
       titleProps={{ text: "Delete tags" }}
+      // The Dialog presses its primary button on Enter by default; for a delete, opening the
+      // dialog and tapping Enter must not be enough. Focus starts on Cancel instead.
+      enterPrimary={false}
+      defaultActiveElement={`.${CANCEL_CLASS}`}
+      escDismiss={false}
       footerButtonProps={[
-        { text: "Cancel", onClick: onCancel, disabled: Boolean(busyLabel) },
+        { className: CANCEL_CLASS, text: "Cancel", onClick: onCancel, disabled: Boolean(busyLabel) },
         {
           text: busyLabel ?? `Delete ${tags.length} tag${tags.length !== 1 ? "s" : ""}`,
           primary: true,

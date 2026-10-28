@@ -97,34 +97,83 @@ export const FormItem: React.FC<
   </label>
 );
 
+/**
+ * Follows the real Dialog's keyboard contract: `enterPrimary` defaults to true, so Enter presses
+ * the primary footer button, `escDismiss` defaults to true, and `defaultActiveElement` is the
+ * selector that gets focus on open. Like the real Button, a footer button swallows Escape
+ * (blurring itself and stopping the event), so the dialog never sees it from a focused button.
+ */
 export const Dialog: React.FC<
   React.PropsWithChildren<{
     titleProps?: { text?: string };
     footerButtonProps?: Array<{
+      className?: string;
       text: string;
       onClick?: () => void;
       disabled?: boolean;
+      primary?: boolean;
     }>;
+    defaultActiveElement?: string;
+    enterPrimary?: boolean;
+    escDismiss?: boolean;
     onDismiss?: () => void;
   }>
-> = ({ titleProps, footerButtonProps = [], onDismiss, children }) => (
-  <div role="dialog">
-    <h2>{titleProps?.text}</h2>
-    <div>{children}</div>
-    <div>
-      {footerButtonProps.map((button) => (
-        <button
-          key={button.text}
-          onClick={() => button.onClick?.()}
-          disabled={button.disabled}
-        >
-          {button.text}
-        </button>
-      ))}
+> = ({
+  titleProps,
+  footerButtonProps = [],
+  defaultActiveElement,
+  enterPrimary = true,
+  escDismiss = true,
+  onDismiss,
+  children,
+}) => {
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const target = defaultActiveElement
+      ? rootRef.current?.querySelector<HTMLElement>(defaultActiveElement)
+      : null;
+    target?.focus();
+  }, [defaultActiveElement]);
+
+  return (
+    <div
+      role="dialog"
+      ref={rootRef}
+      onKeyDown={(e) => {
+        const primary = footerButtonProps.find((button) => button.primary);
+        if (enterPrimary && primary && e.key === "Enter" && !e.defaultPrevented && !primary.disabled) {
+          primary.onClick?.();
+        }
+        if (escDismiss && e.key === "Escape" && !e.defaultPrevented) {
+          onDismiss?.();
+        }
+      }}
+    >
+      <h2>{titleProps?.text}</h2>
+      <div>{children}</div>
+      <div>
+        {footerButtonProps.map((button) => (
+          <button
+            key={button.text}
+            className={button.className}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.currentTarget.blur();
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+            onClick={() => button.onClick?.()}
+            disabled={button.disabled}
+          >
+            {button.text}
+          </button>
+        ))}
+      </div>
+      {onDismiss ? <button onClick={onDismiss}>Close</button> : null}
     </div>
-    {onDismiss ? <button onClick={onDismiss}>Close</button> : null}
-  </div>
-);
+  );
+};
 
 export const Checkbox: React.FC<{
   ariaLabel?: string;

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { DeleteDialog } from "./DeleteDialog";
 
 describe("DeleteDialog", () => {
@@ -66,5 +66,78 @@ describe("DeleteDialog", () => {
     );
 
     expect(screen.getByText("1 tag will be deleted")).toBeInTheDocument();
+  });
+
+  describe("keyboard safety", () => {
+    const renderDialog = () => {
+      const onConfirm = jest.fn();
+      const onCancel = jest.fn();
+      render(
+        <DeleteDialog
+          tags={[{ id: "1", name: "alpha", url: "u" }]}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
+      );
+      return { onConfirm, onCancel };
+    };
+
+    it("starts with focus on Cancel, not on the destructive button", () => {
+      renderDialog();
+
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    });
+
+    it("does not delete when Enter is pressed as soon as the dialog opens", () => {
+      const { onConfirm } = renderDialog();
+
+      // Focus is always inside an open dialog, so the key press bubbles through it.
+      const dialog = screen.getByRole("dialog");
+      const inside = dialog.contains(document.activeElement) ? document.activeElement : dialog;
+      fireEvent.keyDown(inside as Element, { key: "Enter" });
+
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it("cancels on Escape from a focused button, which swallows the key itself", () => {
+      const { onCancel } = renderDialog();
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "Cancel" }), { key: "Escape" });
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels once, not twice, on Escape from elsewhere in the dialog", () => {
+      const { onCancel } = renderDialog();
+
+      fireEvent.keyDown(screen.getByTestId("delete-dialog"), { key: "Escape" });
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores Escape while the delete is running", () => {
+      const onCancel = jest.fn();
+      render(
+        <DeleteDialog
+          tags={[{ id: "1", name: "alpha", url: "u" }]}
+          busyLabel="Deleting 0 of 1…"
+          onConfirm={jest.fn()}
+          onCancel={onCancel}
+        />
+      );
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "Deleting 0 of 1…" }), { key: "Escape" });
+      fireEvent.keyDown(screen.getByTestId("delete-dialog"), { key: "Escape" });
+
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it("still deletes when the Delete button itself is chosen", () => {
+      const { onConfirm } = renderDialog();
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete 1 tag" }));
+
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
   });
 });
