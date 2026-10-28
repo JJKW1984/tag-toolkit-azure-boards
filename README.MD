@@ -20,7 +20,7 @@ For Marketplace listing content, see [`overview.md`](overview.md). For an index 
 - Rename a tag inline across all matching work items
 - Merge one or more tags into a target tag
 - Delete one or more tags from all matching work items
-- Search and filter tags by name or first letter (A–Z)
+- Search tags by name, filter by first letter (Starts with), and sort by name or work item count
 - Refresh counts manually or automatically when the 24-hour cache is stale
 - Paginate results 25 tags at a time
 
@@ -241,8 +241,8 @@ paging, or its case-folding, so do not read it as coverage of the count feature.
 ### UI-level tests (local only)
 
 The Playwright suite drives the installed `-develop` extension's real hub in a
-browser, covering the components and the client-side behaviors — search, A–Z
-navigation, pagination — that the API harness cannot reach.
+browser, covering the components and the client-side behaviors — search, the
+Starts with filter, pagination — that the API harness cannot reach.
 
 Prerequisites:
 
