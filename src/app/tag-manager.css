@@ -48,10 +48,24 @@
   min-width: 0;
 }
 
-/* Card inner flex-column layout */
+/*
+  Card inner flex-column layout. The Card's content wrapper is a flex row, so without
+  flex-grow this column sizes to its content: fine for a wide table, but the search bar,
+  tabs and refresh row all narrow to the width of a short empty state.
+*/
 .tm-card-content {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+  The empty states supply no illustration, but ZeroData still reserves a 160px image slot
+  above the heading. The slot is an <img> with no src and no alt text, so collapse it.
+*/
+.tm-card-content .vss-ZeroDataItem--image {
+  display: none;
 }
 
 /* Refresh bar (cache status + manual refresh button + selection summary) */
