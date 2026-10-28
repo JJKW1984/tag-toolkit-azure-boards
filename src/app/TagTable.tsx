@@ -9,7 +9,7 @@ import {
 import { ObservableValue } from "azure-devops-ui/Core/Observable";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Checkbox } from "azure-devops-ui/Checkbox";
-import { ZeroData } from "azure-devops-ui/ZeroData";
+import { ZeroData, ZeroDataActionType } from "azure-devops-ui/ZeroData";
 import { TagItem } from "../types";
 import { EditableTagName } from "./EditableTagName";
 
@@ -18,6 +18,9 @@ type TagTableBaseProps = {
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
   onToggleAll: (select: boolean) => void;
+  /** True when a search or letter filter produced this list, so an empty list is "no matches", not "no tags". */
+  isFiltered?: boolean;
+  onClearFilters?: () => void;
 };
 
 type TagTableProps =
@@ -37,7 +40,7 @@ const colWidthName = new ObservableValue(300);
 const EMPTY_NAMES: string[] = [];
 
 export const TagTable: React.FC<TagTableProps> = (props) => {
-  const { tags, selectedIds, onToggle, onToggleAll, onRename } = props;
+  const { tags, selectedIds, onToggle, onToggleAll, onRename, isFiltered, onClearFilters } = props;
   const existingNames = onRename ? props.existingNames : EMPTY_NAMES;
 
   const allSelected = tags.length > 0 && tags.every((t) => selectedIds.has(t.id));
@@ -110,7 +113,7 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
     },
     {
       id: ColumnFillId,
-      name: "Work Items",
+      name: "Work items (org-wide)",
       renderCell: (_rowIndex, columnIndex, tableColumn, item) => (
         <SimpleTableCell
           columnIndex={columnIndex}
@@ -134,10 +137,22 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
 
   // Every hook above runs on every render; only the output branches below.
   if (tags.length === 0) {
+    if (isFiltered) {
+      return (
+        <ZeroData
+          primaryText="No tags match your filters"
+          secondaryText="Check the spelling, or clear the search and letter filter to see every tag."
+          imageAltText=""
+          actionText="Clear filters"
+          actionType={ZeroDataActionType.ctaButton}
+          onActionClick={onClearFilters}
+        />
+      );
+    }
     return (
       <ZeroData
         primaryText="No tags found"
-        secondaryText="This project has no work item tags yet."
+        secondaryText="This project has no work item tags yet. Tags you add to work items will appear here."
         imageAltText=""
       />
     );

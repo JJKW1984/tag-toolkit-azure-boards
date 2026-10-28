@@ -66,6 +66,76 @@ describe("MergeDialog", () => {
     expect(screen.getByText("old-tag")).toBeInTheDocument();
   });
 
+  describe("warning copy", () => {
+    const twoSources = [
+      { id: "1", name: "one", url: "u" },
+      { id: "2", name: "two", url: "u" },
+    ];
+    const renderDialog = () =>
+      render(
+        <MergeDialog
+          sources={twoSources}
+          allTags={[{ id: "3", name: "keeper", url: "u" }]}
+          onConfirm={jest.fn()}
+          onCancel={jest.fn()}
+        />
+      );
+    const target = () => screen.getByPlaceholderText("Type to search or create a tag");
+    const warning = () => screen.getByTestId("merge-warning");
+
+    it("asks for a target before describing what will be removed", () => {
+      renderDialog();
+
+      expect(warning()).toHaveTextContent("Choose or name the tag to keep");
+      expect(warning()).not.toHaveTextContent("will be merged into the target");
+    });
+
+    it("names the kept tag when the target is one of the selected tags", () => {
+      renderDialog();
+      fireEvent.change(target(), { target: { value: "one" } });
+
+      expect(warning()).toHaveTextContent(
+        "“one” is kept. The other tag is deleted, and work items that use it are re-tagged “one”."
+      );
+    });
+
+    it("names the target when other tags are merged into a different tag", () => {
+      renderDialog();
+      fireEvent.change(target(), { target: { value: "keeper" } });
+
+      expect(warning()).toHaveTextContent(
+        "The 2 selected tags are deleted, and work items that use them are re-tagged “keeper”."
+      );
+    });
+
+    it("says a brand-new target will be created", () => {
+      renderDialog();
+      fireEvent.change(target(), { target: { value: "fresh" } });
+
+      expect(warning()).toHaveTextContent("“fresh” will be created");
+    });
+  });
+
+  it("shows each selected tag's work item count and how old the counts are", () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    render(
+      <MergeDialog
+        sources={[
+          { id: "1", name: "one", url: "u", count: 7 },
+          { id: "2", name: "two", url: "u", count: 0 },
+        ]}
+        allTags={[]}
+        countsUpdatedAt={fiveMinutesAgo}
+        onConfirm={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+
+    expect(screen.getByTestId("tag-count-one")).toHaveTextContent("7");
+    expect(screen.getByTestId("tag-count-two")).toHaveTextContent("0");
+    expect(screen.getByTestId("counts-note")).toHaveTextContent("counted 5 minutes ago");
+  });
+
   it("selects a source tag as the target when its pill is clicked", () => {
     const onConfirm = jest.fn();
     const twoSources = [

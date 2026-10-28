@@ -4,15 +4,19 @@ import { Dialog } from "azure-devops-ui/Dialog";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 import { Pill, PillSize, PillVariant } from "azure-devops-ui/Pill";
 import { TagItem } from "../types";
+import { CountsNote, TagCount } from "./TagCounts";
 
 interface DeleteDialogProps {
   tags: TagItem[];
+  /** When the per-tag counts were taken (ISO), or null when they have never loaded. */
+  countsUpdatedAt?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export const DeleteDialog: React.FC<DeleteDialogProps> = ({
   tags,
+  countsUpdatedAt,
   onConfirm,
   onCancel,
 }) => {
@@ -59,9 +63,11 @@ export const DeleteDialog: React.FC<DeleteDialogProps> = ({
               iconProps={{ iconName: "Tag" }}
             >
               {t.name}
+              <TagCount tag={t} />
             </Pill>
           ))}
         </div>
+        <CountsNote tags={tags} updatedAt={countsUpdatedAt} />
       </div>
     </Dialog>
   );

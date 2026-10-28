@@ -67,3 +67,18 @@
   font-size: 12px;
   cursor: help;
 }
+
+/* Work item count inside a dialog pill: separated from the name, digits aligned */
+.tm-pill-count {
+  margin-inline-start: 6px;
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid currentColor;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Explains what the pill counts mean and how old they are */
+.tm-counts-note {
+  font-size: 13px;
+  color: var(--palette-neutral-60, #555);
+}

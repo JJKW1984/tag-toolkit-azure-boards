@@ -194,6 +194,12 @@ export const TagManagerApp: React.FC = () => {
     [pagedTags]
   );
 
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setAlphaFilter(null);
+    setCurrentPage(0);
+  };
+
   const handleClearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
   // --- Action triggers (open dialogs) ---
@@ -313,8 +319,9 @@ export const TagManagerApp: React.FC = () => {
             />
             <div className="tm-refresh-bar">
               <span className="tm-last-updated">
-                Last updated:{" "}
-                {lastUpdated ? new Date(lastUpdated).toLocaleString() : "Never"}
+                {lastUpdated
+                  ? `Last updated: ${new Date(lastUpdated).toLocaleString()}`
+                  : "Counts haven't loaded yet. Select Refresh Counts to load them."}
               </span>
               {lastStats && (
                 <span
@@ -347,6 +354,8 @@ export const TagManagerApp: React.FC = () => {
                 onToggleAll={handleToggleAll}
                 onRename={handleRename}
                 existingNames={existingNames}
+                isFiltered={searchQuery.trim() !== "" || alphaFilter !== null}
+                onClearFilters={handleClearFilters}
               />
             )}
             {!loading && (
@@ -396,6 +405,7 @@ export const TagManagerApp: React.FC = () => {
       {dialog?.type === "delete" && (
         <DeleteDialog
           tags={dialog.tags}
+          countsUpdatedAt={lastUpdated}
           onConfirm={() => runDeleteJobs(dialog.tags)}
           onCancel={() => setDialog(null)}
         />
@@ -404,6 +414,7 @@ export const TagManagerApp: React.FC = () => {
         <MergeDialog
           sources={dialog.sources}
           allTags={tags}
+          countsUpdatedAt={lastUpdated}
           onConfirm={(targetName) =>
             runMergeJobs(
               dialog.sources.filter(

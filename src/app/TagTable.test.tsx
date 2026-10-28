@@ -18,6 +18,41 @@ describe("TagTable", () => {
     expect(screen.getByText("No tags found")).toBeInTheDocument();
   });
 
+  it("tells a first-time user what to do when the project has no tags", () => {
+    render(
+      <TagTable
+        tags={[]}
+        selectedIds={new Set()}
+        onToggle={jest.fn()}
+        onToggleAll={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText("No tags found")).toBeInTheDocument();
+    expect(screen.getByText(/Tags you add to work items will appear here/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+  });
+
+  it("explains an empty search and offers to clear the filters", () => {
+    const onClearFilters = jest.fn();
+    render(
+      <TagTable
+        tags={[]}
+        selectedIds={new Set()}
+        onToggle={jest.fn()}
+        onToggleAll={jest.fn()}
+        isFiltered={true}
+        onClearFilters={onClearFilters}
+      />
+    );
+
+    expect(screen.getByText("No tags match your filters")).toBeInTheDocument();
+    expect(screen.queryByText("No tags found")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
   it("survives going from rows to no rows and back (hook order stays stable)", () => {
     const props = {
       selectedIds: new Set<string>(),

@@ -132,16 +132,51 @@ describe("TagManagerApp", () => {
     });
   });
 
-  it("shows 'Never' as last updated when no cache exists", async () => {
+  it("says counts have not loaded, and what to do, when no cache exists", async () => {
     mockTagService.getAllTags.mockResolvedValue([]);
     mockTagCountCacheService.getCache.mockResolvedValue(null);
 
     render(<TagManagerApp />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Last updated:/)).toBeInTheDocument();
-      expect(screen.getByText(/Never/)).toBeInTheDocument();
+      expect(screen.getByText(/Counts haven't loaded yet/)).toBeInTheDocument();
     });
+    expect(screen.queryByText(/Last updated:/)).not.toBeInTheDocument();
+  });
+
+  it("shows a no-match state after a search and restores the list when filters are cleared", async () => {
+    mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "alpha", url: "u" }]);
+
+    render(<TagManagerApp />);
+    await screen.findByText("alpha");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search tags" }), {
+      target: { value: "zzz" },
+    });
+    expect(screen.getByText("No tags match your filters")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    expect(await screen.findByText("alpha")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search tags" })).toHaveValue("");
+  });
+
+  it("passes the cache age to the delete dialog", async () => {
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "alpha", url: "u" }]);
+    mockTagCountCacheService.getCache.mockResolvedValue({
+      counts: { alpha: 12 },
+      lastUpdated: threeHoursAgo,
+    });
+
+    render(<TagManagerApp />);
+    await screen.findByText("alpha");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select alpha" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete/ }));
+
+    expect(await screen.findByTestId("counts-note")).toHaveTextContent("counted 3 hours ago");
+    expect(screen.getByTestId("tag-count-alpha")).toHaveTextContent("12");
   });
 
   it("shows formatted timestamp and populates counts when cache exists", async () => {

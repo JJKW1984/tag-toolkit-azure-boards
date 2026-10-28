@@ -139,13 +139,21 @@ export const Checkbox: React.FC<{
   />
 );
 
-export const ZeroData: React.FC<{ primaryText?: string; secondaryText?: string }> = ({
-  primaryText,
-  secondaryText,
-}) => (
+export const ZeroDataActionType = {
+  ctaButton: 0,
+  link: 2,
+};
+
+export const ZeroData: React.FC<{
+  primaryText?: string;
+  secondaryText?: string;
+  actionText?: string;
+  onActionClick?: () => void;
+}> = ({ primaryText, secondaryText, actionText, onActionClick }) => (
   <div>
     <div>{primaryText}</div>
     <div>{secondaryText}</div>
+    {actionText ? <button onClick={() => onActionClick?.()}>{actionText}</button> : null}
   </div>
 );
 
