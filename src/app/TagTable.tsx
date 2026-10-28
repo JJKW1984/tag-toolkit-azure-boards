@@ -1,9 +1,11 @@
 // src/app/TagTable.tsx
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import {
-  ColumnFillId,
+  ColumnJustification,
+  ColumnSorting,
   ITableColumn,
   SimpleTableCell,
+  SortOrder,
   Table,
 } from "azure-devops-ui/Table";
 import { ObservableValue } from "azure-devops-ui/Core/Observable";
@@ -12,6 +14,7 @@ import { Checkbox } from "azure-devops-ui/Checkbox";
 import { ZeroData, ZeroDataActionType } from "azure-devops-ui/ZeroData";
 import { TagItem } from "../types";
 import { EditableTagName } from "./EditableTagName";
+import { SortKey, SortState } from "../utils/sortTags";
 
 type TagTableBaseProps = {
   tags: TagItem[];
@@ -21,6 +24,9 @@ type TagTableBaseProps = {
   /** True when a search or letter filter produced this list, so an empty list is "no matches", not "no tags". */
   isFiltered?: boolean;
   onClearFilters?: () => void;
+  /** The active sort. Columns are only sortable when `onSort` is also given. */
+  sort?: SortState;
+  onSort?: (sort: SortState) => void;
 };
 
 type TagTableProps =
@@ -36,11 +42,11 @@ type TagTableProps =
 // Column widths are stable ObservableValues — defined outside the component
 // so they are not recreated on every render (prevents ADO Table column flicker).
 const colWidthSelect = new ObservableValue(48);
-const colWidthName = new ObservableValue(300);
+const colWidthCount = new ObservableValue(190);
 const EMPTY_NAMES: string[] = [];
 
 export const TagTable: React.FC<TagTableProps> = (props) => {
-  const { tags, selectedIds, onToggle, onToggleAll, onRename, isFiltered, onClearFilters } = props;
+  const { tags, selectedIds, onToggle, onToggleAll, onRename, isFiltered, onClearFilters, sort, onSort } = props;
   const existingNames = onRename ? props.existingNames : EMPTY_NAMES;
 
   const allSelected = tags.length > 0 && tags.every((t) => selectedIds.has(t.id));
@@ -48,6 +54,21 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
 
   // A stable provider keeps the Table from resetting focus and scroll on every render.
   const tableItems = useMemo(() => new ArrayItemProvider<TagItem>(tags), [tags]);
+
+  // A column is sortable when it has sortProps; only the active one carries a sortOrder.
+  const sortProps = (key: SortKey) =>
+    onSort
+      ? {
+          sortProps: {
+            sortOrder:
+              sort?.key === key
+                ? sort.direction === "asc"
+                  ? SortOrder.ascending
+                  : SortOrder.descending
+                : undefined,
+          },
+        }
+      : {};
 
   // Column renderers that close over selectedIds/onToggle are memoized so the
   // Table does not reinitialize on every checkbox toggle.
@@ -109,15 +130,20 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
         </SimpleTableCell>
       ),
       readonly: true,
-      width: colWidthName,
+      // Flexes with the card, so the fixed count column never gets pushed out of view.
+      width: -1,
+      ...sortProps("name"),
     },
     {
-      id: ColumnFillId,
+      id: "count",
       name: "Work items (org-wide)",
+      justification: ColumnJustification.Right,
       renderCell: (_rowIndex, columnIndex, tableColumn, item) => (
         <SimpleTableCell
           columnIndex={columnIndex}
           tableColumn={tableColumn}
+          // The column's justification only moves the header; the cell content has to be pushed over too.
+          contentClassName="justify-end"
           key={`count-${item.id}`}
         >
           <span data-testid="tag-count" data-tag-name={item.name}>
@@ -130,10 +156,30 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
         </SimpleTableCell>
       ),
       readonly: true,
-      width: -1,
+      width: colWidthCount,
+      ...sortProps("count"),
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [selectedIds, onToggle, onToggleAll, allSelected, someSelected, onRename, existingNames]);
+  ], [selectedIds, onToggle, onToggleAll, allSelected, someSelected, onRename, existingNames, onSort, sort?.key, sort?.direction]);
+
+  // The behavior is created once and reads the latest columns and callback through refs.
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
+  const onSortRef = useRef(onSort);
+  onSortRef.current = onSort;
+  const behaviors = useMemo(
+    () => [
+      new ColumnSorting<TagItem>((columnIndex, proposedSortOrder) => {
+        const id = columnsRef.current[columnIndex]?.id;
+        if (id !== "name" && id !== "count") return;
+        onSortRef.current?.({
+          key: id,
+          direction: proposedSortOrder === SortOrder.ascending ? "asc" : "desc",
+        });
+      }),
+    ],
+    []
+  );
 
   // Every hook above runs on every render; only the output branches below.
   if (tags.length === 0) {
@@ -161,6 +207,7 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
   return (
     <Table<TagItem>
       ariaLabel="Work item tags"
+      behaviors={onSort ? behaviors : undefined}
       columns={columns}
       itemProvider={tableItems}
       role="grid"

@@ -210,9 +210,27 @@ export const SimpleTableCell: React.FC<React.PropsWithChildren<unknown>> = ({
   children,
 }) => <div>{children}</div>;
 
+export const SortOrder = { ascending: 0, descending: 1 };
+export const ColumnJustification = { Left: 0, Right: 1 };
+
+/** Holds the delegate; the Table mock calls it the way the real behavior does on a header click. */
+export class ColumnSorting<T = unknown> {
+  constructor(
+    public onSort: (
+      columnIndex: number,
+      proposedSortOrder: number,
+      event: React.MouseEvent<HTMLElement>
+    ) => void
+  ) {}
+  public items?: T[];
+}
+
 export function Table<T>(props: {
+  behaviors?: unknown[];
   columns: Array<{
     id: string;
+    name?: string;
+    sortProps?: { sortOrder?: number };
     renderHeaderCell?: (
       columnIndex: number,
       tableColumn: unknown
@@ -240,11 +258,43 @@ export function Table<T>(props: {
     <table>
       <thead>
         <tr>
-          {props.columns.map((column, colIndex) => (
-            <th key={`header-${column.id}`}>
-              {column.renderHeaderCell?.(colIndex, column) ?? null}
-            </th>
-          ))}
+          {props.columns.map((column, colIndex) => {
+            const sorting = props.behaviors?.find((b) => b instanceof ColumnSorting) as
+              | ColumnSorting
+              | undefined;
+            const sortOrder = column.sortProps?.sortOrder;
+            return (
+              <th
+                key={`header-${column.id}`}
+                aria-sort={
+                  sortOrder === undefined
+                    ? undefined
+                    : sortOrder === SortOrder.ascending
+                    ? "ascending"
+                    : "descending"
+                }
+              >
+                {column.renderHeaderCell ? (
+                  column.renderHeaderCell(colIndex, column)
+                ) : column.sortProps && sorting ? (
+                  <button
+                    onClick={(e) =>
+                      // The real behavior proposes ascending unless the column is already ascending.
+                      sorting.onSort(
+                        colIndex,
+                        sortOrder === SortOrder.ascending ? SortOrder.descending : SortOrder.ascending,
+                        e
+                      )
+                    }
+                  >
+                    {column.name}
+                  </button>
+                ) : (
+                  column.name ?? null
+                )}
+              </th>
+            );
+          })}
         </tr>
       </thead>
       <tbody>

@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TagTable } from "./TagTable";
+import { SortState } from "../utils/sortTags";
 
 describe("TagTable", () => {
   it("shows zero data state when no tags are available", () => {
@@ -94,6 +95,67 @@ describe("TagTable", () => {
 
     expect(onToggleAll).toHaveBeenCalled();
     expect(onToggle).toHaveBeenCalledWith("1");
+  });
+});
+
+describe("TagTable — sorting", () => {
+  const tags = [
+    { id: "1", name: "alpha", url: "u", count: 3 },
+    { id: "2", name: "beta", url: "u", count: 0 },
+  ];
+  const renderTable = (sort: SortState, onSort = jest.fn()) => {
+    render(
+      <TagTable
+        tags={tags}
+        selectedIds={new Set()}
+        onToggle={jest.fn()}
+        onToggleAll={jest.fn()}
+        sort={sort}
+        onSort={onSort}
+      />
+    );
+    return onSort;
+  };
+
+  it("lets the Tag and Work items columns be sorted, and says which one is", () => {
+    renderTable({ key: "count", direction: "asc" });
+
+    expect(screen.getByRole("button", { name: "Tag" }).closest("th")).not.toHaveAttribute("aria-sort");
+    expect(screen.getByRole("button", { name: "Work items (org-wide)" }).closest("th")).toHaveAttribute(
+      "aria-sort",
+      "ascending"
+    );
+  });
+
+  it("reports a descending sort on the active column", () => {
+    renderTable({ key: "name", direction: "desc" });
+
+    expect(screen.getByRole("button", { name: "Tag" }).closest("th")).toHaveAttribute(
+      "aria-sort",
+      "descending"
+    );
+  });
+
+  it("asks for the least-used tags first when the count header is chosen", () => {
+    const onSort = renderTable({ key: "name", direction: "asc" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Work items (org-wide)" }));
+
+    expect(onSort).toHaveBeenCalledWith({ key: "count", direction: "asc" });
+  });
+
+  it("flips the direction when the active column's header is chosen again", () => {
+    const onSort = renderTable({ key: "name", direction: "asc" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Tag" }));
+
+    expect(onSort).toHaveBeenCalledWith({ key: "name", direction: "desc" });
+  });
+
+  it("does not make the selection column sortable", () => {
+    renderTable({ key: "name", direction: "asc" });
+
+    expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 });
 

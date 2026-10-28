@@ -20,6 +20,7 @@ import { MergeDialog } from "./MergeDialog";
 import "./tag-manager.css";
 import { SearchBar } from "./SearchBar";
 import { sanitizeError } from "../utils/sanitizeError";
+import { SortState, sortTags } from "../utils/sortTags";
 
 /** Work in flight behind an open dialog; `done`/`total` are set when progress is countable. */
 type BusyState = { kind: "delete" | "merge"; done?: number; total?: number } | null;
@@ -71,6 +72,7 @@ export const TagManagerApp: React.FC = () => {
   const [alphaFilter, setAlphaFilter] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sort, setSort] = useState<SortState>({ key: "name", direction: "asc" });
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [lastStats, setLastStats] = useState<RefreshStats | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -83,7 +85,7 @@ export const TagManagerApp: React.FC = () => {
     tagsRef.current = tags;
   }, [tags]);
 
-  // --- Derived list: search -> letter -> page ---
+  // --- Derived list: search -> letter -> sort -> page ---
   // Memoized so the table gets stable inputs and select-all can act on exactly the rows shown.
 
   const searchFiltered = useMemo(() => {
@@ -101,9 +103,11 @@ export const TagManagerApp: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(filteredTags.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages - 1);
+  // Sorted before paging, so the first page really holds the first rows in the chosen order.
+  const sortedTags = useMemo(() => sortTags(filteredTags, sort), [filteredTags, sort]);
   const pagedTags = useMemo(
-    () => filteredTags.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
-    [filteredTags, safePage]
+    () => sortedTags.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [sortedTags, safePage]
   );
   const existingNames = useMemo(() => tags.map((t) => t.name), [tags]);
 
@@ -329,6 +333,11 @@ export const TagManagerApp: React.FC = () => {
     setCurrentPage(0);
   };
 
+  const handleSort = useCallback((next: SortState) => {
+    setSort(next);
+    setCurrentPage(0);
+  }, []);
+
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     setCurrentPage(0);
@@ -435,6 +444,8 @@ export const TagManagerApp: React.FC = () => {
                 existingNames={existingNames}
                 isFiltered={searchQuery.trim() !== "" || alphaFilter !== null}
                 onClearFilters={handleClearFilters}
+                sort={sort}
+                onSort={handleSort}
               />
             )}
             {!loading && totalPages > 1 && (
