@@ -3,17 +3,32 @@
    All ADO CSS tokens (var(--palette-*)) are from azure-devops-ui.
    ============================================================ */
 
-/* Pagination row */
-.tm-pagination {
+/* Footer under the table: selection summary on the left, pagination on the right */
+.tm-footer {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 12px;
-  padding: 8px 4px 4px;
+  min-height: 40px;
+  padding: 4px;
   border-top: 1px solid var(--palette-neutral-10, #e0e0e0);
   margin-top: 4px;
   font-size: 13px;
   color: var(--palette-neutral-60, #555);
+}
+
+.tm-selection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tm-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
 /* Loading spinner centering */

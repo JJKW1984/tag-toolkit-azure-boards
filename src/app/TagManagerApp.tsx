@@ -75,6 +75,30 @@ export const TagManagerApp: React.FC = () => {
     tagsRef.current = tags;
   }, [tags]);
 
+  // --- Derived list: search -> letter -> page ---
+  // Memoized so the table gets stable inputs and select-all can act on exactly the rows shown.
+
+  const searchFiltered = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return query ? tags.filter((t) => t.name.toLowerCase().includes(query)) : tags;
+  }, [tags, searchQuery]);
+
+  const filteredTags = useMemo(() => {
+    if (!alphaFilter) return searchFiltered;
+    return searchFiltered.filter((t) => {
+      const ch = t.name[0]?.toUpperCase();
+      return alphaFilter === "#" ? !(ch >= "A" && ch <= "Z") : ch === alphaFilter;
+    });
+  }, [searchFiltered, alphaFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTags.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages - 1);
+  const pagedTags = useMemo(
+    () => filteredTags.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [filteredTags, safePage]
+  );
+  const existingNames = useMemo(() => tags.map((t) => t.name), [tags]);
+
   // --- Helpers ---
 
   const handleRename = useCallback(async (tagId: string, newName: string) => {
@@ -154,9 +178,23 @@ export const TagManagerApp: React.FC = () => {
     });
   }, []);
 
-  const handleToggleAll = useCallback((select: boolean) => {
-    setSelectedIds(select ? new Set(tags.map((t) => t.id)) : new Set());
-  }, [tags]);
+  // The header checkbox reflects the visible page, so it acts on the visible page only.
+  // Selections made on other pages or under other filters are left as they are.
+  const handleToggleAll = useCallback(
+    (select: boolean) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const t of pagedTags) {
+          if (select) next.add(t.id);
+          else next.delete(t.id);
+        }
+        return next;
+      });
+    },
+    [pagedTags]
+  );
+
+  const handleClearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
   // --- Action triggers (open dialogs) ---
 
@@ -224,28 +262,10 @@ export const TagManagerApp: React.FC = () => {
 
   // --- Render ---
 
-  const searchFiltered = searchQuery.trim()
-    ? tags.filter((t) =>
-        t.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
-      )
-    : tags;
-  const existingNames = useMemo(() => tags.map((t) => t.name), [tags]);
-
-  const filteredTags = alphaFilter
-    ? searchFiltered.filter((t) => {
-        const ch = t.name[0]?.toUpperCase();
-        return alphaFilter === "#"
-          ? !(ch >= "A" && ch <= "Z")
-          : ch === alphaFilter;
-      })
-    : searchFiltered;
-
-  const totalPages = Math.max(1, Math.ceil(filteredTags.length / PAGE_SIZE));
-  const safePage = Math.min(currentPage, totalPages - 1);
-  const pagedTags = filteredTags.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-
   const n = selectedIds.size;
   const sel = n > 0 ? ` (${n})` : "";
+  const selectedOnPage = pagedTags.filter((t) => selectedIds.has(t.id)).length;
+  const selectedNotShown = n - selectedOnPage;
   const commandBarItems: IHeaderCommandBarItem[] = [
     {
       id: "merge",
@@ -329,28 +349,44 @@ export const TagManagerApp: React.FC = () => {
                 existingNames={existingNames}
               />
             )}
-            {!loading && totalPages > 1 && (
-              <div className="tm-pagination" data-testid="pagination">
-                <span data-testid="pagination-status">
-                  Page {safePage + 1} of {totalPages}
-                  {" "}({filteredTags.length} tag{filteredTags.length !== 1 ? "s" : ""})
-                </span>
-                <ButtonGroup>
-                  <Button
-                    subtle={true}
-                    text="Previous"
-                    iconProps={{ iconName: "ChevronLeft" }}
-                    disabled={safePage === 0}
-                    onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-                  />
-                  <Button
-                    subtle={true}
-                    text="Next"
-                    iconProps={{ iconName: "ChevronRight" }}
-                    disabled={safePage >= totalPages - 1}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
-                  />
-                </ButtonGroup>
+            {!loading && (
+              <div className="tm-footer">
+                {/* Below the table, so it appearing never moves the rows under the pointer. */}
+                <div className="tm-selection-status" role="status">
+                  {n > 0 && (
+                    <>
+                      <span data-testid="selection-status">
+                        {plural(n, "tag")} selected
+                        {selectedNotShown > 0 && ` · ${selectedNotShown.toLocaleString()} not shown`}
+                      </span>
+                      <Button subtle={true} text="Clear selection" onClick={handleClearSelection} />
+                    </>
+                  )}
+                </div>
+                {totalPages > 1 && (
+                  <div className="tm-pagination" data-testid="pagination">
+                    <span data-testid="pagination-status">
+                      Page {safePage + 1} of {totalPages}
+                      {" "}({filteredTags.length} tag{filteredTags.length !== 1 ? "s" : ""})
+                    </span>
+                    <ButtonGroup>
+                      <Button
+                        subtle={true}
+                        text="Previous"
+                        iconProps={{ iconName: "ChevronLeft" }}
+                        disabled={safePage === 0}
+                        onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                      />
+                      <Button
+                        subtle={true}
+                        text="Next"
+                        iconProps={{ iconName: "ChevronRight" }}
+                        disabled={safePage >= totalPages - 1}
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                      />
+                    </ButtonGroup>
+                  </div>
+                )}
               </div>
             )}
           </div>

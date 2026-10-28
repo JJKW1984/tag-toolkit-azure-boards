@@ -59,6 +59,7 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           key={`sel-${item.id}`}
         >
           <Checkbox
+            ariaLabel={`Select ${item.name}`}
             checked={selectedIds.has(item.id)}
             onChange={(_e, checked) => onToggle(item.id)}
           />
@@ -71,6 +72,7 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           key="sel-header"
         >
           <Checkbox
+            ariaLabel="Select all tags on this page"
             triState={true}
             checked={someSelected && !allSelected ? undefined : allSelected}
             onChange={(_e, checked) => onToggleAll(checked ?? false)}

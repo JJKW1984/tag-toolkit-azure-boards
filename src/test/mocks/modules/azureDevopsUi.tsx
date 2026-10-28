@@ -127,11 +127,13 @@ export const Dialog: React.FC<
 );
 
 export const Checkbox: React.FC<{
+  ariaLabel?: string;
   checked?: boolean;
   onChange?: (_event: React.ChangeEvent<HTMLInputElement>, checked: boolean) => void;
-}> = ({ checked, onChange }) => (
+}> = ({ ariaLabel, checked, onChange }) => (
   <input
     type="checkbox"
+    aria-label={ariaLabel}
     checked={Boolean(checked)}
     onChange={(event) => onChange?.(event, event.target.checked)}
   />
