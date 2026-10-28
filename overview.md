@@ -16,7 +16,8 @@ Tag Toolkit adds a **Tag Toolkit** hub to Azure Boards. From there you can:
 The tag list is searchable and filterable so you can quickly find what you need:
 
 - **Search bar** — filter by any part of the tag name
-- **A–Z navigation** — jump to tags starting with a specific letter, or `#` for non-alphabetic tags
+- **Starts with** — show only tags that begin with a specific letter, or `#` for numbers and symbols
+- **Sorting** — order the list by tag name or by work item count; sort by count to bring unused tags to the top
 - **Pagination** — tags load 25 at a time so the page stays fast even with large tag sets
 
 ## Safe by Design

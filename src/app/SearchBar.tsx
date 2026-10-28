@@ -16,9 +16,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       position: "relative",
       display: "flex",
       alignItems: "center",
-      padding: "6px 0 8px",
-      borderBottom: "1px solid var(--tm-divider)",
-      marginBottom: "4px",
+      flex: "1 1 240px",
+      minWidth: 0,
     }}
   >
     <input

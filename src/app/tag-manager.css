@@ -60,6 +60,22 @@
   min-width: 0;
 }
 
+/* Search and the starts-with filter share one row, with the divider beneath both. */
+.tm-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--tm-divider);
+  margin-bottom: 4px;
+}
+
+.tm-starts-with {
+  flex: 0 0 auto;
+  width: 220px;
+}
+
 /*
   The empty states supply no illustration, but ZeroData still reserves a 160px image slot
   above the heading. The slot is an <img> with no src and no alt text, so collapse it.

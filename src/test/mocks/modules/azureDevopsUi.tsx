@@ -312,38 +312,82 @@ export function Table<T>(props: {
   );
 }
 
-// ---- Tabs ----
-const TabBarContext = React.createContext<(id: string) => void>(() => {});
+// ---- Dropdown ----
+/** The real selection is observable: a Dropdown re-renders when something selects an index. */
+export class ListSelection {
+  value: Array<{ beginIndex: number; endIndex: number }> = [];
+  private listeners = new Set<() => void>();
 
-export const TabSize = {
-  Compact: "compact",
-  Tall: "tall",
-  LargeLink: "large-link",
+  select(index: number) {
+    this.value = [{ beginIndex: index, endIndex: index }];
+    this.listeners.forEach((listener) => listener());
+  }
+
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+}
+
+export class DropdownSelection extends ListSelection {}
+
+/**
+ * A native select: enough to pick an item and see which one is selected. A class like the
+ * real component, so a ref reaches `collapse()`. Like the real one it subscribes to the
+ * selection in componentDidMount, and `renderSelectedItems` receives the selection and ALL
+ * the items (not just the selected ones); its result is what the closed dropdown displays.
+ */
+type MockDropdownItem = { id: string; text?: string };
+type MockDropdownProps = {
+  ariaLabel?: string;
+  items?: MockDropdownItem[];
+  selection: ListSelection;
+  onSelect?: (event: React.SyntheticEvent, item: MockDropdownItem) => void;
+  renderSelectedItems?: (selection: ListSelection, items: MockDropdownItem[]) => string;
 };
 
-export const TabBar: React.FC<{
-  selectedTabId?: string;
-  onSelectedTabChanged: (tabId: string) => void;
-  tabSize?: string;
-  children?: React.ReactNode;
-}> = ({ children, onSelectedTabChanged }) => (
-  <TabBarContext.Provider value={onSelectedTabChanged}>
-    <div data-testid="ado-tab-bar">{children}</div>
-  </TabBarContext.Provider>
-);
+export class Dropdown extends React.Component<MockDropdownProps> {
+  /** Lets tests see that the list was asked to close. */
+  public static collapseCalls = 0;
+  private unsubscribe?: () => void;
 
-export const Tab: React.FC<{
-  id: string;
-  name?: string;
-  disabled?: boolean;
-}> = ({ id, name }) => {
-  const onTabChanged = React.useContext(TabBarContext);
-  return (
-    <button data-testid={`ado-tab-${id}`} onClick={() => onTabChanged(id)}>
-      {name}
-    </button>
-  );
-};
+  componentDidMount() {
+    this.unsubscribe = this.props.selection.subscribe(() => this.forceUpdate());
+  }
+
+  componentWillUnmount() {
+    this.unsubscribe?.();
+  }
+
+  collapse = () => {
+    Dropdown.collapseCalls += 1;
+  };
+
+  render() {
+    const { ariaLabel, items = [], selection, onSelect, renderSelectedItems } = this.props;
+    return (
+      <>
+        <select
+          aria-label={ariaLabel}
+          value={selection.value[0]?.beginIndex ?? -1}
+          onChange={(e) => onSelect?.(e, items[Number(e.target.value)])}
+        >
+          {selection.value.length === 0 ? <option value={-1} /> : null}
+          {items.map((item, index) => (
+            <option key={item.id} value={index}>
+              {item.text}
+            </option>
+          ))}
+        </select>
+        {renderSelectedItems ? (
+          <span data-testid="dropdown-text">{renderSelectedItems(selection, items)}</span>
+        ) : null}
+      </>
+    );
+  }
+}
 
 // ---- Button / ButtonGroup ----
 export const Button: React.FC<{

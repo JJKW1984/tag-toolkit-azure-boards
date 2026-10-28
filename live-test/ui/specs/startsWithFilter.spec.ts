@@ -1,24 +1,38 @@
+import type { Page } from "@playwright/test";
 import { expect, openHub, rowNames, searchFor, test, totalTagCount } from "../fixtures";
+
+const filter = (page: Page) => page.getByLabel("Starts with", { exact: true });
+
+async function chooseLetter(page: Page, name: string): Promise<void> {
+  await filter(page).click();
+  await page.getByRole("option", { name, exact: true }).click();
+}
+
+async function offeredChoices(page: Page): Promise<string[]> {
+  await filter(page).click();
+  const names = await page.getByRole("option").allInnerTexts();
+  await page.keyboard.press("Escape");
+  return names.map((n) => n.trim());
+}
 
 test("filters to tags starting with the selected letter", async ({ page }) => {
   await openHub(page);
 
-  await page.locator('[data-testid="alpha-nav"]').getByText("L", { exact: true }).click();
+  await chooseLetter(page, "L");
 
   const names = await rowNames(page);
   expect(names.length).toBeGreaterThan(0);
   expect(names.every((n) => n.toUpperCase().startsWith("L"))).toBe(true);
 });
 
-test("the All tab restores every tag", async ({ page, seed }) => {
+test("Any letter restores every tag", async ({ page, seed }) => {
   await openHub(page);
   await searchFor(page, seed.runId);
-  const nav = page.locator('[data-testid="alpha-nav"]');
 
-  await nav.getByText("L", { exact: true }).click();
+  await chooseLetter(page, "L");
   const filtered = await totalTagCount(page);
 
-  await nav.getByText("All", { exact: true }).click();
+  await chooseLetter(page, "Any letter");
   const all = await totalTagCount(page);
 
   expect(all).toBeGreaterThanOrEqual(filtered);
@@ -27,17 +41,16 @@ test("the All tab restores every tag", async ({ page, seed }) => {
 test("offers only letters that have tags", async ({ page, seed }) => {
   await openHub(page);
   await searchFor(page, seed.runId);
-  const nav = page.locator('[data-testid="alpha-nav"]');
 
   // Every seeded tag starts with "l", so L is always offered.
-  await expect(nav.getByText("L", { exact: true })).toBeVisible();
+  const choices = await offeredChoices(page);
+  expect(choices).toContain("L");
 
   // Scoped to this run's own tags (all start with "l"), so Q can never
-  // legitimately appear here — this only checks AlphaNav doesn't spuriously
+  // legitimately appear here — this only checks the filter doesn't spuriously
   // offer a letter with zero tags in the current (searched) view.
   const namesStartingWithQ = (await rowNames(page)).filter((n) =>
     n.toUpperCase().startsWith("Q")
   );
-  const qVisible = await nav.getByText("Q", { exact: true }).isVisible().catch(() => false);
-  expect(qVisible).toBe(namesStartingWithQ.length > 0);
+  expect(choices.includes("Q")).toBe(namesStartingWithQ.length > 0);
 });

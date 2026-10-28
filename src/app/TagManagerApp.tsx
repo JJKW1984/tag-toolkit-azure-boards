@@ -14,7 +14,7 @@ import * as SDK from "azure-devops-extension-sdk";
 import { TagCountCacheService } from "../services/TagCountCacheService";
 import { RefreshStats, TagItem } from "../types";
 import { TagTable } from "./TagTable";
-import { AlphaNav } from "./AlphaNav";
+import { StartsWithFilter } from "./StartsWithFilter";
 import { DeleteDialog } from "./DeleteDialog";
 import { MergeDialog } from "./MergeDialog";
 import "./tag-manager.css";
@@ -387,12 +387,14 @@ export const TagManagerApp: React.FC = () => {
         )}
         <Card>
           <div className="tm-card-content">
-            <SearchBar value={searchQuery} onChange={handleSearchChange} />
-            <AlphaNav
-              tags={searchFiltered}
-              activeFilter={alphaFilter}
-              onFilter={handleAlphaFilter}
-            />
+            <div className="tm-filter-row">
+              <SearchBar value={searchQuery} onChange={handleSearchChange} />
+              <StartsWithFilter
+                tags={searchFiltered}
+                activeFilter={alphaFilter}
+                onFilter={handleAlphaFilter}
+              />
+            </div>
             <div className="tm-refresh-bar">
               <span className="tm-last-updated">
                 {lastUpdated
