@@ -18,6 +18,24 @@ describe("TagTable", () => {
     expect(screen.getByText("No tags found")).toBeInTheDocument();
   });
 
+  it("survives going from rows to no rows and back (hook order stays stable)", () => {
+    const props = {
+      selectedIds: new Set<string>(),
+      onToggle: jest.fn(),
+      onToggleAll: jest.fn(),
+    };
+    const rows = [{ id: "1", name: "alpha", url: "u1" }];
+
+    const { rerender } = render(<TagTable tags={rows} {...props} />);
+    expect(screen.getByText("alpha")).toBeInTheDocument();
+
+    rerender(<TagTable tags={[]} {...props} />);
+    expect(screen.getByText("No tags found")).toBeInTheDocument();
+
+    rerender(<TagTable tags={rows} {...props} />);
+    expect(screen.getByText("alpha")).toBeInTheDocument();
+  });
+
   it("toggles row selection and select-all", () => {
     const onToggle = jest.fn();
     const onToggleAll = jest.fn();

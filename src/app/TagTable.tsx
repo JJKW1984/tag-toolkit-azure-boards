@@ -40,20 +40,11 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
   const { tags, selectedIds, onToggle, onToggleAll, onRename } = props;
   const existingNames = onRename ? props.existingNames : EMPTY_NAMES;
 
-  if (tags.length === 0) {
-    return (
-      <ZeroData
-        primaryText="No tags found"
-        secondaryText="This project has no work item tags yet."
-        imageAltText=""
-      />
-    );
-  }
-
   const allSelected = tags.length > 0 && tags.every((t) => selectedIds.has(t.id));
   const someSelected = tags.some((t) => selectedIds.has(t.id));
 
-  const tableItems = new ArrayItemProvider<TagItem>(tags);
+  // A stable provider keeps the Table from resetting focus and scroll on every render.
+  const tableItems = useMemo(() => new ArrayItemProvider<TagItem>(tags), [tags]);
 
   // Column renderers that close over selectedIds/onToggle are memoized so the
   // Table does not reinitialize on every checkbox toggle.
@@ -138,6 +129,17 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [selectedIds, onToggle, onToggleAll, allSelected, someSelected, onRename, existingNames]);
+
+  // Every hook above runs on every render; only the output branches below.
+  if (tags.length === 0) {
+    return (
+      <ZeroData
+        primaryText="No tags found"
+        secondaryText="This project has no work item tags yet."
+        imageAltText=""
+      />
+    );
+  }
 
   return (
     <Table<TagItem>
