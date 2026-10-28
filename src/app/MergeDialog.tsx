@@ -12,6 +12,8 @@ interface MergeDialogProps {
   allTags: TagItem[];
   /** When the per-tag counts were taken (ISO), or null when they have never loaded. */
   countsUpdatedAt?: string | null;
+  /** Set while the work runs, e.g. "Deleting 2 of 5…". Locks the dialog and replaces the confirm label. */
+  busyLabel?: string | null;
   onConfirm: (targetName: string) => void;
   onCancel: () => void;
 }
@@ -20,6 +22,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
   sources,
   allTags,
   countsUpdatedAt,
+  busyLabel,
   onConfirm,
   onCancel,
 }) => {
@@ -145,17 +148,17 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
     <Dialog
       titleProps={{ text: "Merge Tags" }}
       footerButtonProps={[
-        { text: "Cancel", onClick: onCancel },
+        { text: "Cancel", onClick: onCancel, disabled: Boolean(busyLabel) },
         {
-          text: "Merge",
+          text: busyLabel ?? "Merge",
           primary: true,
           danger: true,
-          disabled: !isValid,
+          disabled: !isValid || Boolean(busyLabel),
           onClick: () => onConfirm(trimmed),
           iconProps: { iconName: "BranchMerge" },
         },
       ]}
-      onDismiss={onCancel}
+      onDismiss={busyLabel ? () => {} : onCancel}
     >
       <div data-testid="merge-dialog">
         <MessageCard severity={MessageCardSeverity.Warning}>

@@ -6,6 +6,7 @@ import { IHeaderCommandBarItem } from "azure-devops-ui/HeaderCommandBar";
 import { Page } from "azure-devops-ui/Page";
 import { Spinner, SpinnerSize } from "azure-devops-ui/Spinner";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
+import { Toast } from "azure-devops-ui/Toast";
 import { Button } from "azure-devops-ui/Button";
 import { ButtonGroup } from "azure-devops-ui/ButtonGroup";
 import { TagService } from "../services/TagService";
@@ -20,6 +21,9 @@ import "./tag-manager.css";
 import { SearchBar } from "./SearchBar";
 import { sanitizeError } from "../utils/sanitizeError";
 
+/** Work in flight behind an open dialog; `done`/`total` are set when progress is countable. */
+type BusyState = { kind: "delete" | "merge"; done?: number; total?: number } | null;
+
 type DialogState =
   | { type: "delete"; tags: TagItem[] }
   | { type: "merge"; sources: TagItem[] }
@@ -28,6 +32,7 @@ type DialogState =
 const tagService = new TagService();
 const tagCountCacheService = new TagCountCacheService();
 const PAGE_SIZE = 25;
+const TOAST_DURATION_MS = 8000;
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -69,6 +74,9 @@ export const TagManagerApp: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [lastStats, setLastStats] = useState<RefreshStats | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [busy, setBusy] = useState<BusyState>(null);
+  const [toast, setToast] = useState<{ message: string } | null>(null);
+  const toastRef = useRef<Toast>(null);
   const tagsRef = useRef<TagItem[]>([]);
 
   useEffect(() => {
@@ -131,11 +139,32 @@ export const TagManagerApp: React.FC = () => {
     }
   }, []);
 
+  // --- Toast ---
+
+  const dismissToast = useCallback(() => {
+    const current = toastRef.current;
+    if (!current) {
+      setToast(null);
+      return;
+    }
+    // Let the toast fade; a cancelled fade (unmount) has nothing left to clear.
+    current.fadeOut().promise.then(() => setToast(null), () => {});
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(dismissToast, TOAST_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [toast, dismissToast]);
+
   // --- Data loading ---
 
-  const loadTags = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // `silent` reloads behind the current table: no spinner, and an error already on screen stays.
+  const loadTags = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [result, cache] = await Promise.all([
         tagService.getAllTags(),
@@ -217,40 +246,79 @@ export const TagManagerApp: React.FC = () => {
   // --- Background jobs ---
 
   const runDeleteJobs = async (tagsToDelete: TagItem[]) => {
-    setDialog(null);
-    for (const tag of tagsToDelete) {
-      try {
-        await tagService.deleteTagById(tag.id);
-        setTags((prev) => prev.filter((t) => t.id !== tag.id));
-        setSelectedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(tag.id);
-          return next;
-        });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+    const total = tagsToDelete.length;
+    const failures: { tag: TagItem; error: string }[] = [];
+    let deleted = 0;
+    setBusy({ kind: "delete", done: 0, total });
+    try {
+      for (const tag of tagsToDelete) {
+        try {
+          await tagService.deleteTagById(tag.id);
+          deleted++;
+          setTags((prev) => prev.filter((t) => t.id !== tag.id));
+          setSelectedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(tag.id);
+            return next;
+          });
+        } catch (e) {
+          failures.push({ tag, error: sanitizeError(e) });
+        }
+        setBusy({ kind: "delete", done: deleted + failures.length, total });
       }
+    } finally {
+      setBusy(null);
+      setDialog(null);
+    }
+
+    if (deleted > 0) setToast({ message: `Deleted ${plural(deleted, "tag")}.` });
+    if (failures.length > 0) {
+      const reasons = failures.map((f) => `${f.tag.name} (${f.error})`).join("; ");
+      setError(
+        `Couldn't delete ${plural(failures.length, "tag")}: ${reasons}. They're still selected so you can try again.`
+      );
     }
   };
 
   const runMergeJobs = async (sources: TagItem[], targetName: string) => {
-    setDialog(null);
-    const { succeeded, failed } = await tagService.mergeTags(sources, targetName);
+    setBusy({ kind: "merge" });
+    try {
+      const { succeeded, failed } = await tagService.mergeTags(sources, targetName);
 
-    // Remove fully-merged sources from the table immediately.
-    const removedIds = new Set(succeeded.map((s) => s.source.id));
-    setTags((prev) => prev.filter((t) => !removedIds.has(t.id)));
+      // Remove fully-merged sources from the table immediately.
+      const removedIds = new Set(succeeded.map((s) => s.source.id));
+      setTags((prev) => prev.filter((t) => !removedIds.has(t.id)));
 
-    if (failed.length > 0) {
-      setError(failed.map((f) => `${f.source.name}: ${f.error}`).join("; "));
-    }
+      if (succeeded.length > 0) {
+        const retagged = succeeded.reduce((sum, s) => sum + s.affectedCount, 0);
+        setToast({
+          message: `Merged ${plural(succeeded.length, "tag")} into “${targetName}”. ${plural(
+            retagged,
+            "work item"
+          )} re-tagged. Refresh counts to update the numbers.`,
+        });
+      }
 
-    // Reload to pick up the new target tag if it was created.
-    await loadTags(); // resets selectedIds to empty
+      // The merge itself is done; free the user from the dialog before the reload.
+      setBusy(null);
+      setDialog(null);
 
-    // Re-select any sources that failed to merge so the user can retry.
-    if (failed.length > 0) {
-      setSelectedIds(new Set(failed.map((f) => f.source.id)));
+      // Reload behind the table to pick up the new target tag if it was created.
+      await loadTags({ silent: true }); // resets selectedIds to empty
+
+      if (failed.length > 0) {
+        const reasons = failed.map((f) => `${f.source.name} (${f.error})`).join("; ");
+        setError(
+          `Couldn't merge ${plural(failed.length, "tag")} into “${targetName}”: ${reasons}. They're still selected so you can try again.`
+        );
+        // Re-select any sources that failed to merge so the user can retry.
+        setSelectedIds(new Set(failed.map((f) => f.source.id)));
+      }
+    } catch (e) {
+      setError(sanitizeError(e));
+    } finally {
+      setBusy(null);
+      setDialog(null);
     }
   };
 
@@ -402,10 +470,22 @@ export const TagManagerApp: React.FC = () => {
         </Card>
       </div>
 
+      {toast && (
+        <Toast
+          ref={toastRef}
+          message={toast.message}
+          callToAction="Dismiss"
+          onCallToActionClick={dismissToast}
+        />
+      )}
+
       {dialog?.type === "delete" && (
         <DeleteDialog
           tags={dialog.tags}
           countsUpdatedAt={lastUpdated}
+          busyLabel={
+            busy?.kind === "delete" ? `Deleting ${busy.done ?? 0} of ${busy.total ?? 0}…` : null
+          }
           onConfirm={() => runDeleteJobs(dialog.tags)}
           onCancel={() => setDialog(null)}
         />
@@ -415,6 +495,7 @@ export const TagManagerApp: React.FC = () => {
           sources={dialog.sources}
           allTags={tags}
           countsUpdatedAt={lastUpdated}
+          busyLabel={busy?.kind === "merge" ? "Merging…" : null}
           onConfirm={(targetName) =>
             runMergeJobs(
               dialog.sources.filter(

@@ -289,3 +289,24 @@ export const Pill: React.FC<
     {children}
   </span>
 );
+
+// ---- Toast ----
+export class Toast extends React.Component<{
+  message: string;
+  callToAction?: string;
+  onCallToActionClick?: () => void;
+}> {
+  fadeOut(): { promise: Promise<void>; cancel: () => void } {
+    return { promise: Promise.resolve(), cancel: () => {} };
+  }
+
+  render() {
+    const { message, callToAction, onCallToActionClick } = this.props;
+    return (
+      <div>
+        <span role="alert">{message}</span>
+        {callToAction ? <button onClick={() => onCallToActionClick?.()}>{callToAction}</button> : null}
+      </div>
+    );
+  }
+}

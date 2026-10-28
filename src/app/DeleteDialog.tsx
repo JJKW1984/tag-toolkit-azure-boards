@@ -10,6 +10,8 @@ interface DeleteDialogProps {
   tags: TagItem[];
   /** When the per-tag counts were taken (ISO), or null when they have never loaded. */
   countsUpdatedAt?: string | null;
+  /** Set while the work runs, e.g. "Deleting 2 of 5…". Locks the dialog and replaces the confirm label. */
+  busyLabel?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -17,6 +19,7 @@ interface DeleteDialogProps {
 export const DeleteDialog: React.FC<DeleteDialogProps> = ({
   tags,
   countsUpdatedAt,
+  busyLabel,
   onConfirm,
   onCancel,
 }) => {
@@ -24,16 +27,17 @@ export const DeleteDialog: React.FC<DeleteDialogProps> = ({
     <Dialog
       titleProps={{ text: "Delete Tags" }}
       footerButtonProps={[
-        { text: "Cancel", onClick: onCancel },
+        { text: "Cancel", onClick: onCancel, disabled: Boolean(busyLabel) },
         {
-          text: `Delete ${tags.length} tag${tags.length !== 1 ? "s" : ""}`,
+          text: busyLabel ?? `Delete ${tags.length} tag${tags.length !== 1 ? "s" : ""}`,
           primary: true,
           danger: true,
+          disabled: Boolean(busyLabel),
           onClick: onConfirm,
           iconProps: { iconName: "Delete" },
         },
       ]}
-      onDismiss={onCancel}
+      onDismiss={busyLabel ? () => {} : onCancel}
     >
       <div data-testid="delete-dialog">
         <MessageCard severity={MessageCardSeverity.Warning}>
