@@ -17,6 +17,7 @@ import { TagTable } from "./TagTable";
 import { StartsWithFilter } from "./StartsWithFilter";
 import { DeleteDialog } from "./DeleteDialog";
 import { MergeDialog } from "./MergeDialog";
+import { workItemsLabel } from "./TagCounts";
 import "./tag-manager.css";
 import { SearchBar } from "./SearchBar";
 import { sanitizeError } from "../utils/sanitizeError";
@@ -117,6 +118,7 @@ export const TagManagerApp: React.FC = () => {
   // --- Helpers ---
 
   const handleRename = useCallback(async (tagId: string, newName: string) => {
+    const before = tagsRef.current.find((t) => t.id === tagId);
     try {
       const updated = await tagService.renameTagById(tagId, newName);
       setTags((prev) =>
@@ -124,8 +126,16 @@ export const TagManagerApp: React.FC = () => {
           .map((t) => (t.id === tagId ? { ...t, name: updated.name } : t))
           .sort((a, b) => a.name.localeCompare(b.name))
       );
+      // The tag moves in the sorted list and the rename reached every work item that carried it, so say
+      // so. The count is the last one taken, which may be old, and is labelled that way.
+      const counted = before?.count === undefined ? "" : ` (${workItemsLabel(before.count)} when last counted)`;
+      setToast({
+        message: `Renamed “${before?.name ?? "the tag"}” to “${updated.name}” on every work item that used it${counted}.`,
+      });
     } catch (e) {
-      setError(sanitizeError(e));
+      // Rejected, not shown in the page banner: the editor stays open with the draft and puts this beside
+      // the field, and saying it in both places would be saying it twice.
+      throw new Error(sanitizeError(e));
     }
   }, []);
 

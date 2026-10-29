@@ -16,6 +16,38 @@
   --tm-accent-tint: rgba(var(--palette-primary-tint-30, 222, 236, 249), 1);
   --tm-surface: var(--callout-background-color, rgba(255, 255, 255, 1));
   --tm-text-secondary: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+  --tm-focus: var(--focus-border-color, #0078d4);
+  --tm-error: var(--status-error-foreground, #c4314b);
+}
+
+/*
+  The merge-target and rename fields are plain inputs, so they have to draw their own focus ring. The outline is
+  inset so the dialog's scroll container cannot clip it, and it matches the host controls' blue.
+*/
+.tm-merge-target:focus,
+.tm-rename-input:focus {
+  outline: 2px solid var(--tm-focus);
+  outline-offset: -2px;
+}
+
+/* The line beside a hand-built field that says how to finish with it, or what it is doing. */
+.tm-edit-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  /* A table cell is nowrap, which would cut the sentence off at the column edge. */
+  white-space: normal;
+  font-size: 12px;
+  color: var(--tm-text-secondary);
+}
+
+/* Inline validation message under a hand-built field */
+.tm-field-error {
+  /* Same reason: a long message must wrap, not be clipped by the cell it sits in. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--tm-error);
 }
 
 /* Pagination row */
@@ -131,4 +163,58 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/*
+  Tag pills in the dialogs. A long name shortens with an ellipsis and the work item count after it
+  never does, so one very long tag cannot push the dialog wider than the screen.
+*/
+.tm-pill-content {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.tm-pill-name {
+  /*
+    The dialog sizes itself to its content, and unbreakable text counts at full length toward
+    that size however much ellipsis it has. An absolute cap, in viewport units because a
+    percentage has nothing to resolve against yet, is what keeps it on screen.
+  */
+  max-width: min(18rem, 55vw);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tm-pill-content .tm-pill-count {
+  flex: none;
+}
+
+/* The clickable wrapper around a source pill may shrink to the dialog, never past it. */
+.tm-pill-button {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.tm-pill-row > .bolt-pill,
+.tm-pill-button .bolt-pill {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A name the user typed has no break opportunities; let it wrap instead of widening the dialog. */
+.tm-wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
+/* "Showing the first N of M" under a capped suggestion list */
+.tm-list-hint {
+  padding: 6px 10px;
+  border-top: 1px solid var(--tm-divider);
+  font-size: 12px;
+  color: var(--tm-text-secondary);
 }

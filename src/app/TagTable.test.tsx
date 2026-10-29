@@ -98,6 +98,107 @@ describe("TagTable", () => {
   });
 });
 
+describe("TagTable — what the checkboxes show", () => {
+  const tags = [
+    { id: "1", name: "alpha", url: "u" },
+    { id: "2", name: "beta", url: "u" },
+    { id: "3", name: "gamma", url: "u" },
+  ];
+  const handlers = { onToggle: jest.fn(), onToggleAll: jest.fn() };
+  const rowBox = (name: string) => screen.getByRole("checkbox", { name: `Select ${name}` });
+  const headerBox = () => screen.getByRole("checkbox", { name: "Select all tags on this page" });
+  const renderWith = (selected: string[]) => {
+    const view = render(<TagTable tags={tags} selectedIds={new Set(selected)} {...handlers} />);
+    return (next: string[]) => view.rerender(<TagTable tags={tags} selectedIds={new Set(next)} {...handlers} />);
+  };
+
+  it("checks every row when select-all changes the selection after the rows were drawn", () => {
+    const select = renderWith([]);
+
+    select(["1", "2", "3"]);
+
+    for (const name of ["alpha", "beta", "gamma"]) expect(rowBox(name)).toBeChecked();
+    expect(headerBox()).toBeChecked();
+  });
+
+  it("unchecks every row when the selection is cleared from outside the table", () => {
+    const select = renderWith(["1", "2"]);
+    expect(rowBox("alpha")).toBeChecked();
+
+    select([]);
+
+    for (const name of ["alpha", "beta", "gamma"]) expect(rowBox(name)).not.toBeChecked();
+    expect(headerBox()).not.toBeChecked();
+  });
+
+  it("shows exactly the selected rows as checked", () => {
+    const select = renderWith([]);
+
+    select(["2"]);
+
+    expect(rowBox("alpha")).not.toBeChecked();
+    expect(rowBox("beta")).toBeChecked();
+    expect(rowBox("gamma")).not.toBeChecked();
+  });
+
+  it("shows the header as mixed when some but not all rows are selected", () => {
+    const select = renderWith([]);
+    expect(headerBox()).not.toBePartiallyChecked();
+
+    select(["1"]);
+    expect(headerBox()).toBePartiallyChecked();
+
+    select(["1", "2", "3"]);
+    expect(headerBox()).toBeChecked();
+    expect(headerBox()).not.toBePartiallyChecked();
+
+    select(["1", "3"]);
+    expect(headerBox()).toBePartiallyChecked();
+
+    select([]);
+    expect(headerBox()).not.toBeChecked();
+    expect(headerBox()).not.toBePartiallyChecked();
+  });
+
+  it("keeps following the selection through several changes in a row", () => {
+    const select = renderWith([]);
+
+    select(["1"]);
+    select(["1", "2"]);
+    select(["3"]);
+
+    expect(rowBox("alpha")).not.toBeChecked();
+    expect(rowBox("beta")).not.toBeChecked();
+    expect(rowBox("gamma")).toBeChecked();
+  });
+
+  it.each([
+    ["nothing is selected", [], true],
+    ["every row is selected", ["1", "2", "3"], false],
+    ["only some rows are selected", ["1"], false],
+  ])("pressing select-all when %s asks to select: %s", (_label, selected, expected) => {
+    const onToggleAll = jest.fn();
+    render(<TagTable tags={tags} selectedIds={new Set(selected)} onToggle={jest.fn()} onToggleAll={onToggleAll} />);
+
+    fireEvent.click(headerBox());
+
+    expect(onToggleAll).toHaveBeenCalledWith(expected);
+  });
+
+  it("shows the selection on a new page of tags", () => {
+    const first = [{ id: "1", name: "alpha", url: "u" }];
+    const second = [{ id: "2", name: "beta", url: "u" }];
+    const selected = new Set(["2"]);
+    const { rerender } = render(<TagTable tags={first} selectedIds={selected} {...handlers} />);
+    expect(rowBox("alpha")).not.toBeChecked();
+
+    rerender(<TagTable tags={second} selectedIds={selected} {...handlers} />);
+
+    expect(rowBox("beta")).toBeChecked();
+    expect(headerBox()).toBeChecked();
+  });
+});
+
 describe("TagTable — sorting", () => {
   const tags = [
     { id: "1", name: "alpha", url: "u", count: 3 },

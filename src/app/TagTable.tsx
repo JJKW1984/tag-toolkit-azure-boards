@@ -1,5 +1,5 @@
 // src/app/TagTable.tsx
-import React, { useMemo, useRef } from "react";
+import React, { useLayoutEffect, useMemo, useRef } from "react";
 import {
   ColumnJustification,
   ColumnSorting,
@@ -10,7 +10,8 @@ import {
 } from "azure-devops-ui/Table";
 import { ObservableValue } from "azure-devops-ui/Core/Observable";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
-import { Checkbox } from "azure-devops-ui/Checkbox";
+import { Checkbox, TriStateCheckbox } from "azure-devops-ui/Checkbox";
+import { Observer } from "azure-devops-ui/Observer";
 import { ZeroData, ZeroDataActionType } from "azure-devops-ui/ZeroData";
 import { TagItem } from "../types";
 import { EditableTagName } from "./EditableTagName";
@@ -45,12 +46,28 @@ const colWidthSelect = new ObservableValue(48);
 const colWidthCount = new ObservableValue(190);
 const EMPTY_NAMES: string[] = [];
 
+/** What the checkboxes show: which tags are on this page and which of them are selected. */
+interface SelectionView {
+  tags: TagItem[];
+  selectedIds: Set<string>;
+}
+
 export const TagTable: React.FC<TagTableProps> = (props) => {
   const { tags, selectedIds, onToggle, onToggleAll, onRename, isFiltered, onClearFilters, sort, onSort } = props;
   const existingNames = onRename ? props.existingNames : EMPTY_NAMES;
 
-  const allSelected = tags.length > 0 && tags.every((t) => selectedIds.has(t.id));
-  const someSelected = tags.some((t) => selectedIds.has(t.id));
+  // The Table re-renders a row when its item or the item provider changes, never when only `columns`
+  // does, so a cell that reads `selectedIds` through a closure keeps showing what it saw when the row
+  // was created: select-all left every row unticked and Clear selection left them ticked. The
+  // checkboxes read the selection from this observable instead and re-render themselves when it changes.
+  const selectionView = useMemo(() => new ObservableValue<SelectionView>({ tags, selectedIds }), []);
+  // A layout effect, so the checkboxes update before the browser paints the new selection.
+  useLayoutEffect(() => {
+    const current = selectionView.value;
+    if (current.tags !== tags || current.selectedIds !== selectedIds) {
+      selectionView.value = { tags, selectedIds };
+    }
+  }, [selectionView, tags, selectedIds]);
 
   // A stable provider keeps the Table from resetting focus and scroll on every render.
   const tableItems = useMemo(() => new ArrayItemProvider<TagItem>(tags), [tags]);
@@ -82,11 +99,15 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key={`sel-${item.id}`}
         >
-          <Checkbox
-            ariaLabel={`Select ${item.name}`}
-            checked={selectedIds.has(item.id)}
-            onChange={(_e, checked) => onToggle(item.id)}
-          />
+          <Observer view={selectionView}>
+            {({ view }: { view: SelectionView }) => (
+              <Checkbox
+                ariaLabel={`Select ${item.name}`}
+                checked={view.selectedIds.has(item.id)}
+                onChange={(_e, checked) => onToggle(item.id)}
+              />
+            )}
+          </Observer>
         </SimpleTableCell>
       ),
       renderHeaderCell: (columnIndex, tableColumn) => (
@@ -95,12 +116,22 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key="sel-header"
         >
-          <Checkbox
-            ariaLabel="Select all tags on this page"
-            triState={true}
-            checked={someSelected && !allSelected ? undefined : allSelected}
-            onChange={(_e, checked) => onToggleAll(checked ?? false)}
-          />
+          <Observer view={selectionView}>
+            {({ view }: { view: SelectionView }) => {
+              const allSelected = view.tags.length > 0 && view.tags.every((t) => view.selectedIds.has(t.id));
+              const someSelected = view.tags.some((t) => view.selectedIds.has(t.id));
+              return (
+                // TriStateCheckbox, not Checkbox: the plain one defaults `checked` to false, so the
+                // `undefined` that means "some selected" became unchecked and the header never showed it.
+                <TriStateCheckbox
+                  ariaLabel="Select all tags on this page"
+                  triState={true}
+                  checked={someSelected && !allSelected ? undefined : allSelected}
+                  onChange={(_e, checked) => onToggleAll(checked ?? false)}
+                />
+              );
+            }}
+          </Observer>
         </SimpleTableCell>
       ),
       readonly: true,
@@ -160,7 +191,7 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
       ...sortProps("count"),
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [selectedIds, onToggle, onToggleAll, allSelected, someSelected, onRename, existingNames, onSort, sort?.key, sort?.direction]);
+  ], [selectionView, onToggle, onToggleAll, onRename, existingNames, onSort, sort?.key, sort?.direction]);
 
   // The behavior is created once and reads the latest columns and callback through refs.
   const columnsRef = useRef(columns);

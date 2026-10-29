@@ -2,9 +2,9 @@
 import React, { useEffect } from "react";
 import { Dialog } from "azure-devops-ui/Dialog";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
-import { Pill, PillSize, PillVariant } from "azure-devops-ui/Pill";
 import { TagItem } from "../types";
-import { CountsNote, TagCount } from "./TagCounts";
+import { CountsNote } from "./TagCounts";
+import { TagPill } from "./TagPill";
 
 interface DeleteDialogProps {
   tags: TagItem[];
@@ -80,17 +80,9 @@ export const DeleteDialog: React.FC<DeleteDialogProps> = ({
         >
           {tags.length} tag{tags.length !== 1 ? "s" : ""} will be deleted
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "0 0 16px" }}>
+        <div className="tm-pill-row" style={{ display: "flex", flexWrap: "wrap", gap: "6px", margin: "0 0 16px" }}>
           {tags.map((t) => (
-            <Pill
-              key={t.id}
-              size={PillSize.regular}
-              variant={PillVariant.outlined}
-              iconProps={{ iconName: "Tag" }}
-            >
-              {t.name}
-              <TagCount tag={t} />
-            </Pill>
+            <TagPill key={t.id} tag={t} showCount={true} />
           ))}
         </div>
         <CountsNote tags={tags} updatedAt={countsUpdatedAt} />

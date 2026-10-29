@@ -22,6 +22,22 @@ describe("DeleteDialog", () => {
     expect(screen.getByText("beta")).toBeInTheDocument();
   });
 
+  it("keeps pills out of the dialog's focus zone so Tab reaches Delete and wraps back to Cancel", () => {
+    const { container } = render(
+      <DeleteDialog
+        tags={[
+          { id: "1", name: "alpha", url: "u" },
+          { id: "2", name: "beta", url: "u" },
+        ]}
+        onConfirm={jest.fn()}
+        onCancel={jest.fn()}
+      />
+    );
+
+    expect(screen.getAllByTestId("pill")).toHaveLength(2);
+    expect(container.querySelectorAll("[data-focuszone]")).toHaveLength(0);
+  });
+
   it("shows how many work items each tag is on, and how old that number is", () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     render(

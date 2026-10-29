@@ -4,13 +4,17 @@ import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 import { TagItem } from "../types";
 import { formatAge } from "../utils/formatAge";
 
+/** "1 work item", "1,234 work items". */
+export const workItemsLabel = (count: number): string =>
+  `${count.toLocaleString()} work item${count === 1 ? "" : "s"}`;
+
 /** The work item count shown next to a tag name inside a dialog pill. Renders nothing when unknown. */
 export const TagCount: React.FC<{ tag: TagItem }> = ({ tag }) =>
   tag.count === undefined ? null : (
     <span
       className="tm-pill-count"
       data-testid={`tag-count-${tag.name}`}
-      title={`${tag.count.toLocaleString()} work items`}
+      title={workItemsLabel(tag.count)}
     >
       {tag.count.toLocaleString()}
     </span>

@@ -1,5 +1,5 @@
-import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import React, { useState } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditableTagName } from "./EditableTagName";
 
@@ -108,7 +108,7 @@ describe("EditableTagName — committing a rename", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  it("calls onRename when the input is blurred", async () => {
+  it("does not rename when the input is blurred: leaving the field abandons the edit", async () => {
     const user = userEvent.setup();
     render(<EditableTagName {...defaultProps} />);
     await user.dblClick(screen.getByText("old-tag"));
@@ -116,10 +116,13 @@ describe("EditableTagName — committing a rename", () => {
     await user.clear(input);
     await user.type(input, "blurred-name");
     await user.tab();
-    expect(defaultProps.onRename).toHaveBeenCalledWith("blurred-name");
+    expect(defaultProps.onRename).not.toHaveBeenCalled();
+    expect(defaultProps.onCancel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByText("old-tag")).toBeInTheDocument();
   });
 
-  it("disables re-entry while rename is in flight", async () => {
+  it("does not offer a second edit, or send a second rename, while one is in flight", async () => {
     let resolveRename: (() => void) | undefined;
     const onRename = jest.fn(
       () => new Promise<void>((resolve) => { resolveRename = resolve; })
@@ -139,13 +142,15 @@ describe("EditableTagName — committing a rename", () => {
     await user.clear(input);
     await user.type(input, "new-name");
     await user.keyboard("[Enter]");
+    await user.keyboard("[Enter]");
 
-    const trigger = screen.getByRole("button", { name: /Rename tag old-tag/i });
-    await user.dblClick(trigger);
-    expect(screen.queryByRole("textbox", { name: "Edit tag name" })).not.toBeInTheDocument();
+    // The editor is still the only thing on screen for this tag: there is no name button to start again from.
+    expect(screen.queryByRole("button", { name: /Rename tag/i })).not.toBeInTheDocument();
+    expect(onRename).toHaveBeenCalledTimes(1);
 
     resolveRename?.();
-    await waitFor(() => expect(onRename).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Edit tag name" })).not.toBeInTheDocument());
+    expect(onRename).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -170,7 +175,7 @@ describe("EditableTagName — cancelling a rename", () => {
     expect(screen.getByText("old-tag")).toBeInTheDocument();
   });
 
-  it("calls onCancel when onRename rejects (API failure)", async () => {
+  it("keeps the editor open, with the draft, when onRename rejects (API failure)", async () => {
     const onRename = jest.fn().mockRejectedValue(new Error("api error"));
     const onCancel = jest.fn();
     const user = userEvent.setup();
@@ -187,9 +192,10 @@ describe("EditableTagName — cancelling a rename", () => {
     await user.clear(input);
     await user.type(input, "new-name");
     await user.keyboard("[Enter]");
-    await waitFor(() => {
-      expect(onCancel).toHaveBeenCalled();
-    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't rename “old-tag”: api error");
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Edit tag name" })).toHaveValue("new-name");
+    expect(screen.getByRole("textbox", { name: "Edit tag name" })).toHaveFocus();
   });
 });
 
@@ -229,12 +235,36 @@ describe("EditableTagName — validation", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/Merge/i);
   });
 
-  it("allows renaming to the same name (no-op rename, not a duplicate)", async () => {
+  it("treats renaming to the same name as nothing to do: no error, no rename, editor closes", async () => {
     const user = userEvent.setup();
     render(<EditableTagName {...defaultProps} />);
     await user.dblClick(screen.getByText("old-tag"));
     await user.keyboard("[Enter]");
-    expect(defaultProps.onRename).toHaveBeenCalledWith("old-tag");
+    expect(defaultProps.onRename).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("ignores spaces around an unchanged name", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    await user.dblClick(screen.getByText("old-tag"));
+    const input = screen.getByRole("textbox", { name: "Edit tag name" });
+    await user.clear(input);
+    await user.type(input, "  old-tag  ");
+    await user.keyboard("[Enter]");
+    expect(defaultProps.onRename).not.toHaveBeenCalled();
+  });
+
+  it("still allows a change of letter case, which is a real rename", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    await user.dblClick(screen.getByText("old-tag"));
+    const input = screen.getByRole("textbox", { name: "Edit tag name" });
+    await user.clear(input);
+    await user.type(input, "Old-Tag");
+    await user.keyboard("[Enter]");
+    expect(defaultProps.onRename).toHaveBeenCalledWith("Old-Tag");
   });
 
   it("clears the error message when the user starts typing again", async () => {
@@ -247,5 +277,204 @@ describe("EditableTagName — validation", () => {
     expect(screen.getByRole("alert")).toBeInTheDocument();
     await user.type(input, "f");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("EditableTagName — telling the user what is happening", () => {
+  const startEditing = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.dblClick(screen.getByText("old-tag"));
+    return screen.getByRole("textbox", { name: "Edit tag name" });
+  };
+
+  it("says how to finish or abandon the edit, and ties that to the field", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    const input = await startEditing(user);
+
+    const hint = screen.getByText("Press Enter to rename, Esc to cancel.");
+    expect(input).toHaveAttribute("aria-describedby", expect.stringContaining(hint.id));
+  });
+
+  it("shows the pencil when the name is focused from the keyboard, not only on hover", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    expect(screen.queryByTitle("Rename")).not.toBeInTheDocument();
+
+    await user.tab();
+
+    expect(screen.getByTitle("Rename")).toBeInTheDocument();
+  });
+
+  it("marks the field invalid and points at the error", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    const input = await startEditing(user);
+    await user.clear(input);
+    await user.type(input, "frontend");
+    await user.keyboard("[Enter]");
+
+    const alert = screen.getByRole("alert");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input.getAttribute("aria-describedby")).toContain(alert.id);
+  });
+
+  it("locks the field and says it is renaming while the rename runs", async () => {
+    let resolveRename: () => void = () => {};
+    const onRename = jest.fn(() => new Promise<void>((resolve) => { resolveRename = resolve; }));
+    const onCancel = jest.fn();
+    const user = userEvent.setup();
+    render(<EditableTagName name="old-tag" onRename={onRename} onCancel={onCancel} existingNames={[]} />);
+    const input = await startEditing(user);
+    await user.clear(input);
+    await user.type(input, "new-name");
+    await user.keyboard("[Enter]");
+
+    expect(screen.getByRole("status")).toHaveTextContent("Renaming…");
+    expect(input).toHaveAttribute("readonly");
+    expect(input).toHaveFocus();
+
+    // Neither Escape, blur nor a second Enter can interrupt or repeat a request that is already out.
+    await user.keyboard("[Escape]");
+    await user.tab();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(onRename).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("textbox", { name: "Edit tag name" })).toBeInTheDocument();
+
+    resolveRename();
+    await waitFor(() => expect(screen.queryByRole("textbox")).not.toBeInTheDocument());
+  });
+
+  it("does not commit while an input method is composing", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    const input = await startEditing(user);
+    fireEvent.change(input, { target: { value: "新しい" } });
+
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+
+    expect(defaultProps.onRename).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "Edit tag name" })).toBeInTheDocument();
+  });
+
+  it("lets right-to-left names be typed in their own direction", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    const input = await startEditing(user);
+
+    expect(input).toHaveAttribute("dir", "auto");
+  });
+});
+
+describe("EditableTagName — where focus goes", () => {
+  const Harness: React.FC<{ onRename?: (n: string) => Promise<void> }> = ({ onRename }) => {
+    const [name, setName] = useState("old-tag");
+    return (
+      <EditableTagName
+        name={name}
+        onRename={async (next) => {
+          await onRename?.(next);
+          setName(next);
+        }}
+        onCancel={jest.fn()}
+        existingNames={[]}
+      />
+    );
+  };
+  const trigger = (name: string) => screen.getByRole("button", { name: `Rename tag ${name}` });
+
+  it("returns to the name after Escape", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    await user.dblClick(screen.getByText("old-tag"));
+
+    await user.keyboard("[Escape]");
+
+    expect(trigger("old-tag")).toHaveFocus();
+  });
+
+  it("returns to the name when the name was not changed", async () => {
+    const user = userEvent.setup();
+    render(<EditableTagName {...defaultProps} />);
+    await user.dblClick(screen.getByText("old-tag"));
+
+    await user.keyboard("[Enter]");
+
+    expect(trigger("old-tag")).toHaveFocus();
+  });
+
+  it("returns to the renamed tag's name after a successful rename", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.dblClick(screen.getByText("old-tag"));
+    const input = screen.getByRole("textbox", { name: "Edit tag name" });
+    await user.clear(input);
+    await user.type(input, "new-name");
+
+    await user.keyboard("[Enter]");
+
+    await waitFor(() => expect(trigger("new-name")).toHaveFocus());
+  });
+
+  describe("when the rename moves the tag off the page", () => {
+    // The list drops the renamed tag, as a re-sort that pushes it onto another page does.
+    const Page: React.FC = () => {
+      const [names, setNames] = useState(["alpha", "beta", "gamma"]);
+      return (
+        <>
+          {names.map((n) => (
+            <EditableTagName
+              key={n}
+              name={n}
+              existingNames={[]}
+              onCancel={jest.fn()}
+              onRename={async () => {
+                setNames((prev) => prev.filter((x) => x !== n));
+              }}
+            />
+          ))}
+        </>
+      );
+    };
+    const renameTo = async (user: ReturnType<typeof userEvent.setup>, from: string, to: string) => {
+      await user.dblClick(screen.getByText(from));
+      const input = screen.getByRole("textbox", { name: "Edit tag name" });
+      await user.clear(input);
+      await user.type(input, to);
+      await user.keyboard("[Enter]");
+    };
+
+    it("lands on the tag that moved up into its place, not on the page", async () => {
+      const user = userEvent.setup();
+      render(<Page />);
+
+      await renameTo(user, "beta", "zeta");
+
+      await waitFor(() => expect(trigger("gamma")).toHaveFocus());
+    });
+
+    it("lands on the last tag when the renamed one was last", async () => {
+      const user = userEvent.setup();
+      render(<Page />);
+
+      await renameTo(user, "gamma", "zeta");
+
+      await waitFor(() => expect(trigger("beta")).toHaveFocus());
+    });
+  });
+
+  it("leaves focus where the user put it when they click or tab away", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <EditableTagName {...defaultProps} />
+        <button>elsewhere</button>
+      </>
+    );
+    await user.dblClick(screen.getByText("old-tag"));
+
+    await user.click(screen.getByRole("button", { name: "elsewhere" }));
+
+    expect(screen.getByRole("button", { name: "elsewhere" })).toHaveFocus();
   });
 });

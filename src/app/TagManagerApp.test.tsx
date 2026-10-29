@@ -111,7 +111,7 @@ describe("TagManagerApp", () => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "one" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Keep “one”/ }));
     fireEvent.click(screen.getByRole("button", { name: "Merge" }));
 
     await waitFor(() => {

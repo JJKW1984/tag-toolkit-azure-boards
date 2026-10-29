@@ -2,8 +2,55 @@ import React from "react";
 
 export const ColumnFillId = "__fill__";
 
+/** Notifies subscribers when `value` is set to something different, like the real one. */
 export class ObservableValue<T = unknown> {
-  constructor(public value: T) {}
+  private current: T;
+  private subscribers = new Set<(value: T) => void>();
+
+  constructor(value: T) {
+    this.current = value;
+  }
+
+  get value(): T {
+    return this.current;
+  }
+
+  set value(next: T) {
+    if (next === this.current) return;
+    this.current = next;
+    this.subscribers.forEach((notify) => notify(next));
+  }
+
+  subscribe(notify: (value: T) => void): (value: T) => void {
+    this.subscribers.add(notify);
+    return notify;
+  }
+
+  unsubscribe(notify: (value: T) => void): void {
+    this.subscribers.delete(notify);
+  }
+}
+
+/**
+ * Like the real Observer: each prop that is an ObservableValue is read and re-rendered on change,
+ * other props pass through, and the children are a function of the resulting values.
+ */
+export function Observer({
+  children,
+  ...watched
+}: { children: (values: Record<string, any>) => React.ReactNode } & Record<string, unknown>): JSX.Element {
+  const [, rerender] = React.useReducer((n: number) => n + 1, 0);
+  const observables = Object.values(watched).filter((v): v is ObservableValue => v instanceof ObservableValue);
+
+  React.useLayoutEffect(() => {
+    observables.forEach((o) => o.subscribe(rerender));
+    return () => observables.forEach((o) => o.unsubscribe(rerender));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, observables);
+
+  const values: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(watched)) values[key] = v instanceof ObservableValue ? v.value : v;
+  return <>{children(values)}</>;
 }
 
 export class ArrayItemProvider<T> {
@@ -175,17 +222,40 @@ export const Dialog: React.FC<
   );
 };
 
-export const Checkbox: React.FC<{
+type CheckboxProps = {
   ariaLabel?: string;
   checked?: boolean;
+  triState?: boolean;
   onChange?: (_event: React.ChangeEvent<HTMLInputElement>, checked: boolean) => void;
-}> = ({ ariaLabel, checked, onChange }) => (
-  <input
-    type="checkbox"
-    aria-label={ariaLabel}
-    checked={Boolean(checked)}
-    onChange={(event) => onChange?.(event, event.target.checked)}
-  />
+};
+
+/** The tri-state box: `checked: undefined` is the indeterminate state, shown as "mixed". */
+export const TriStateCheckbox: React.FC<CheckboxProps> = ({ ariaLabel, checked, triState, onChange }) => {
+  const mixed = Boolean(triState) && checked === undefined;
+  return (
+    <input
+      type="checkbox"
+      aria-label={ariaLabel}
+      aria-checked={mixed ? "mixed" : Boolean(checked)}
+      checked={Boolean(checked)}
+      ref={(el) => {
+        if (el) el.indeterminate = mixed;
+      }}
+      onChange={(event) =>
+        // The real transitions: unchecked -> checked, checked -> indeterminate (tri-state) or unchecked,
+        // indeterminate -> unchecked. They come from the props, not from the native input.
+        onChange?.(event, checked === false ? true : checked === true ? (triState ? (undefined as never) : false) : false)
+      }
+    />
+  );
+};
+
+/**
+ * The plain box has `defaultProps = { checked: false }`, so `checked={undefined}` becomes false and it
+ * can never show the indeterminate state, whatever `triState` says. Use TriStateCheckbox for that.
+ */
+export const Checkbox: React.FC<CheckboxProps> = ({ checked = false, ...rest }) => (
+  <TriStateCheckbox {...rest} checked={checked} />
 );
 
 export const ZeroDataActionType = {
@@ -224,6 +294,37 @@ export class ColumnSorting<T = unknown> {
   ) {}
   public items?: T[];
 }
+
+/**
+ * The real Table re-renders a row when its item or the item provider changes, not when only the
+ * `columns` prop does: existing rows keep the cell closures they were created with, so a cell that
+ * reads state through a closure shows what it saw when the row was created. Rows are memoized the
+ * same way here so a cell has to subscribe to what it shows.
+ */
+const TableRow = React.memo(
+  function TableRow({
+    item,
+    rowIndex,
+    columns,
+  }: {
+    item: unknown;
+    rowIndex: number;
+    provider: unknown;
+    columns: Array<{
+      id: string;
+      renderCell?: (rowIndex: number, columnIndex: number, tableColumn: unknown, item: any) => React.ReactNode;
+    }>;
+  }) {
+    return (
+      <tr>
+        {columns.map((column, colIndex) => (
+          <td key={`${rowIndex}-${column.id}`}>{column.renderCell?.(rowIndex, colIndex, column, item) ?? null}</td>
+        ))}
+      </tr>
+    );
+  },
+  (prev, next) => prev.item === next.item && prev.rowIndex === next.rowIndex && prev.provider === next.provider
+);
 
 export function Table<T>(props: {
   behaviors?: unknown[];
@@ -299,13 +400,13 @@ export function Table<T>(props: {
       </thead>
       <tbody>
         {items.map((item, rowIndex) => (
-          <tr key={`row-${rowIndex}`}>
-            {props.columns.map((column, colIndex) => (
-              <td key={`${rowIndex}-${column.id}`}>
-                {column.renderCell?.(rowIndex, colIndex, column, item) ?? null}
-              </td>
-            ))}
-          </tr>
+          <TableRow
+            key={`row-${rowIndex}`}
+            item={item}
+            rowIndex={rowIndex}
+            provider={props.itemProvider}
+            columns={props.columns}
+          />
         ))}
       </tbody>
     </table>
@@ -420,15 +521,27 @@ export const PillVariant = {
   themedStandard: 3,
 };
 
+/**
+ * Like the real Pill, the content element carries `data-focuszone` unless `excludeFocusZone` is set.
+ * Inside a Dialog the FocusZone counts every such element as a Tab stop even though a pill with no
+ * onClick is not focusable, so Tab lands on it, goes nowhere and never reaches the controls after it.
+ */
 export const Pill: React.FC<
   React.PropsWithChildren<{
     size?: number;
     variant?: number;
     iconProps?: { iconName: string };
     className?: string;
+    contentClassName?: string;
+    excludeFocusZone?: boolean;
   }>
-> = ({ children, variant, iconProps }) => (
-  <span data-testid="pill" data-variant={variant} data-icon={iconProps?.iconName}>
+> = ({ children, variant, iconProps, excludeFocusZone }) => (
+  <span
+    data-testid="pill"
+    data-variant={variant}
+    data-icon={iconProps?.iconName}
+    data-focuszone={excludeFocusZone ? undefined : "mock-focuszone"}
+  >
     {children}
   </span>
 );
@@ -453,3 +566,10 @@ export class Toast extends React.Component<{
     );
   }
 }
+
+// ---- Icon ----
+export const IconSize = { inherit: "inherit", small: "small", medium: "medium", large: "large" };
+
+export const Icon: React.FC<{ iconName?: string; className?: string; size?: string }> = ({ iconName, className }) => (
+  <span aria-hidden="true" data-icon={iconName} className={className} />
+);

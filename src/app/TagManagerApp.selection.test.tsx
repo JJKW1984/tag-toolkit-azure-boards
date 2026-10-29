@@ -50,6 +50,52 @@ describe("TagManagerApp — selection", () => {
     expect(screen.getByRole("button", { name: "Delete (25)" })).toBeInTheDocument();
   });
 
+  it("checks the rows themselves when select-all is pressed, not only the count", async () => {
+    render(<TagManagerApp />);
+    await screen.findByText("tag-01");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all tags on this page" }));
+
+    expect(screen.getByRole("checkbox", { name: "Select tag-01" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select tag-25" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select all tags on this page" })).toBeChecked();
+  });
+
+  it("unchecks the rows when the selection is cleared from the status bar", async () => {
+    render(<TagManagerApp />);
+    await screen.findByText("tag-01");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select tag-02" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select tag-03" }));
+    expect(screen.getByRole("checkbox", { name: "Select tag-02" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+
+    expect(screen.getByRole("checkbox", { name: "Select tag-02" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select tag-03" })).not.toBeChecked();
+  });
+
+  it("shows the header as mixed once only some of the page is selected", async () => {
+    render(<TagManagerApp />);
+    await screen.findByText("tag-01");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select tag-02" }));
+
+    expect(screen.getByRole("checkbox", { name: "Select all tags on this page" })).toBePartiallyChecked();
+  });
+
+  it("clears every row after a select-all, then a single click selects only that row", async () => {
+    render(<TagManagerApp />);
+    await screen.findByText("tag-01");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all tags on this page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select tag-04" }));
+
+    expect(screen.getByRole("checkbox", { name: "Select tag-04" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Select tag-05" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Delete (1)" })).toBeInTheDocument();
+  });
+
   it("labels every row checkbox with its tag name", async () => {
     render(<TagManagerApp />);
     await screen.findByText("tag-01");
