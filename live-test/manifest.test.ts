@@ -189,6 +189,14 @@ describe("listManifestPaths", () => {
     expect(listManifestPaths(dir).map((p) => path.basename(p))).toEqual(["r1.json"]);
   });
 
+  it("skips the UI suite's seed pointer, which is not a run manifest", () => {
+    const dir = tempDir();
+    ManifestStore.create(dir, { runId: "r1", org: "o", project: "p" });
+    fs.writeFileSync(path.join(dir, "ui-seed.json"), "{}", "utf8");
+
+    expect(listManifestPaths(dir).map((p) => path.basename(p))).toEqual(["r1.json"]);
+  });
+
   it("returns an empty list when the directory does not exist", () => {
     expect(listManifestPaths(path.join(tempDir(), "missing"))).toEqual([]);
   });

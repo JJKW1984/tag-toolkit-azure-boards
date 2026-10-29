@@ -216,6 +216,33 @@ describe("cleanupRun — provenance", () => {
     await expect(client.getWorkItemTags([recovered])).rejects.toThrow(/404/);
   });
 
+  it.each(["queryWorkItemIdsByRunId", "listRunTags"] as const)(
+    "leaves the run in-progress when %s fails, so an unrecorded survivor is retried",
+    async (method) => {
+      const client = new FakeAdoClient();
+      const store = newStore();
+      const ctx = buildContext({ client, store, runId: "r1", workItemType: "Task" });
+      await ctx.createWorkItem(["livetest-r1-x-a"]);
+      // Created in ADO but never flushed to the manifest. Only rediscovery can
+      // see it, so a run that could not rediscover must not claim it is clean.
+      const unrecorded = client.seedWorkItem(["livetest-r1-gap-a"], "[livetest-r1] unrecorded");
+      client.failNext(method, "discovery 500");
+
+      const lines: string[] = [];
+      await cleanupRun(client, store, (m) => lines.push(m));
+
+      expect(store.manifest.status).toBe("in-progress");
+      expect(lines.some((l) => l.includes("Cleanup incomplete"))).toBe(true);
+      // Recorded resources are still deleted on a best-effort basis.
+      expect(await client.countWorkItemsWithTag("livetest-r1-x-a")).toBe(0);
+
+      // A retry that can discover it finishes the job.
+      await cleanupRun(client, store, () => undefined);
+      expect(store.manifest.status).toBe("cleaned");
+      await expect(client.getWorkItemTags([unrecorded])).rejects.toThrow(/404/);
+    }
+  );
+
   it("recovers and deletes a run tag even if it was never flushed to the manifest", async () => {
     const client = new FakeAdoClient();
     const store = newStore();

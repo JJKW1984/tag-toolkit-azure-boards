@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { BrowserContext, chromium, Page } from "@playwright/test";
+import { BrowserContext, chromium, Page, test } from "@playwright/test";
 
 /** Gitignored: lives under .live-test-runs/, which .gitignore already covers. */
 export const PROFILE_DIR = path.resolve(
@@ -7,6 +7,8 @@ export const PROFILE_DIR = path.resolve(
   ".live-test-runs",
   "playwright-profile"
 );
+
+const SIGN_IN_WAIT_MS = 5 * 60_000;
 
 const SIGN_IN_HOSTS = ["login.microsoftonline.com", "login.live.com", "login.windows.net"];
 
@@ -47,9 +49,13 @@ export async function assertSignedIn(page: Page): Promise<void> {
   if (!isSignInUrl(page.url())) return;
 
   if (process.env.HEADLESS !== "1") {
+    // assertSignedIn runs inside the test body, so the sign-in wait has to fit
+    // in the test timeout or Playwright aborts the test mid-login. Extend it
+    // only on this path, so a normal run keeps the tight per-test budget.
+    test.setTimeout(test.info().timeout + SIGN_IN_WAIT_MS);
     try {
       await page.waitForURL((url) => !isSignInUrl(url.toString()), {
-        timeout: 5 * 60_000,
+        timeout: SIGN_IN_WAIT_MS,
       });
       return;
     } catch {

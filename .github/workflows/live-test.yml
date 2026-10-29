@@ -74,4 +74,8 @@ jobs:
         with:
           name: live-test-run
           path: .live-test-runs/
+          # The directory is dot-prefixed, and upload-artifact skips hidden
+          # paths by default: without this the artifact is empty and the
+          # manifest needed to recover after a failed cleanup is lost.
+          include-hidden-files: true
           if-no-files-found: warn

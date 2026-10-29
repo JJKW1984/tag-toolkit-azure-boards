@@ -1,8 +1,12 @@
 import { expect, openHub, rowFor, searchFor, test } from "../fixtures";
+import { testTag } from "../../naming";
 
 test("merges two selected tags into a target tag", async ({ page, seed }) => {
   await openHub(page);
-  await searchFor(page, "-ui-merge-");
+  // Scoped to this run: the checkboxes below are picked by position, so a
+  // leftover run's merge tags in the result would be selected and destroyed.
+  const mergeQuery = testTag(seed.runId, "ui", "merge-");
+  await searchFor(page, mergeQuery);
 
   // Select both source tags via their row checkboxes.
   for (const source of seed.merge.sources) {
@@ -21,7 +25,7 @@ test("merges two selected tags into a target tag", async ({ page, seed }) => {
 
   await expect(dialog).toBeHidden({ timeout: 60_000 });
 
-  await searchFor(page, "-ui-merge-");
+  await searchFor(page, mergeQuery);
   await expect(rowFor(page, seed.merge.target)).toBeVisible({ timeout: 30_000 });
   for (const source of seed.merge.sources) {
     await expect(rowFor(page, source)).toHaveCount(0);

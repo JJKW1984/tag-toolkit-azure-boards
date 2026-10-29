@@ -1,10 +1,13 @@
 import { expect, openHub, rowNames, searchFor, test } from "../fixtures";
+import { testTag } from "../../naming";
 
-const VOLUME_QUERY = "-ui-vol-";
+// Scoped to the current run: the assertions need exactly 30 tags, and a leftover
+// run's volume fixtures would otherwise match too.
+const volumeQuery = (runId: string): string => testTag(runId, "ui", "vol-");
 
-test("splits a 30-tag result into two pages of 25 and 5", async ({ page }) => {
+test("splits a 30-tag result into two pages of 25 and 5", async ({ page, seed }) => {
   await openHub(page);
-  await searchFor(page, VOLUME_QUERY);
+  await searchFor(page, volumeQuery(seed.runId));
 
   await expect(page.locator('[data-testid="pagination-status"]')).toHaveText(
     /Page 1 of 2 \(30 tags\)/
@@ -19,9 +22,9 @@ test("splits a 30-tag result into two pages of 25 and 5", async ({ page }) => {
   expect(await rowNames(page)).toHaveLength(5);
 });
 
-test("Previous returns to the first page", async ({ page }) => {
+test("Previous returns to the first page", async ({ page, seed }) => {
   await openHub(page);
-  await searchFor(page, VOLUME_QUERY);
+  await searchFor(page, volumeQuery(seed.runId));
 
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.locator('[data-testid="pagination-status"]')).toHaveText(/Page 2 of 2/);
@@ -30,9 +33,9 @@ test("Previous returns to the first page", async ({ page }) => {
   await expect(page.locator('[data-testid="pagination-status"]')).toHaveText(/Page 1 of 2/);
 });
 
-test("Previous is disabled on the first page and Next on the last", async ({ page }) => {
+test("Previous is disabled on the first page and Next on the last", async ({ page, seed }) => {
   await openHub(page);
-  await searchFor(page, VOLUME_QUERY);
+  await searchFor(page, volumeQuery(seed.runId));
 
   await expect(page.getByRole("button", { name: "Previous" })).toBeDisabled();
 

@@ -233,6 +233,17 @@ export async function cleanupRun(
     return;
   }
 
+  // Rediscovery is the only thing that can see a resource created before its id
+  // was flushed. If either call failed, an unrecorded survivor may still exist,
+  // and marking the run cleaned would make every later sweep skip it.
+  if (!discoveredWorkItemsKnown || !discoveredTagsKnown) {
+    log(
+      `Cleanup incomplete: live resource discovery failed, so unrecorded resources may ` +
+        `remain. Run left in-progress — retry with: pnpm live-test --cleanup ${store.path} --pat <pat>`
+    );
+    return;
+  }
+
   store.markCleaned();
   log("Cleanup complete.");
 }

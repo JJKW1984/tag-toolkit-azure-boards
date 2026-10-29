@@ -122,6 +122,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { main } from "./cli";
+import { AdoClient } from "./adoClient";
 import { ManifestStore } from "./manifest";
 
 describe("main — confirmation gate", () => {
@@ -165,7 +166,13 @@ describe("main — confirmation gate", () => {
 });
 
 describe("main — cleanup mode", () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it("returns 0 and marks a manifest cleaned when there is nothing to delete", async () => {
+    // Cleanup rediscovers live resources before it will call a run clean, so it
+    // needs an answer from ADO. Stub it rather than reaching the real service.
+    jest.spyOn(AdoClient.prototype, "queryWorkItemIdsByRunId").mockResolvedValue([]);
+    jest.spyOn(AdoClient.prototype, "listRunTags").mockResolvedValue([]);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "live-test-main-"));
     const store = ManifestStore.create(dir, {
       runId: "r1",

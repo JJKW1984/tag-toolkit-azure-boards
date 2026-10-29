@@ -115,10 +115,14 @@ function parseRunManifest(raw: unknown): RunManifest {
   };
 }
 
+// The UI suite's seed pointer lives beside the manifests but holds SeedData, not
+// a RunManifest. Kept as a name here because seed.ts imports this module.
+const UI_SEED_FILE = "ui-seed.json";
+
 export function listManifestPaths(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
-    .filter((f) => f.endsWith(".json") && !f.endsWith("-report.json"))
+    .filter((f) => f.endsWith(".json") && !f.endsWith("-report.json") && f !== UI_SEED_FILE)
     .map((f) => path.join(dir, f));
 }
