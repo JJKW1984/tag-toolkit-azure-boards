@@ -304,7 +304,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
               borderRadius: "2px 2px 0 0",
               borderBottom: "none",
               background: "var(--tm-surface)",
-              color: "var(--text-primary-color, #1e1e1e)",
+              color: "var(--tm-text-primary)",
             }}
           />
           <div
@@ -367,7 +367,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
               >
                 <span
                   style={{
-                    color: "var(--communication-foreground, #0078d4)",
+                    color: "var(--tm-accent)",
                     fontWeight: 600,
                     minWidth: 0,
                     overflowWrap: "anywhere",
@@ -379,7 +379,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                   style={{
                     flex: "none",
                     fontSize: "11px",
-                    color: "var(--communication-foreground, #0078d4)",
+                    color: "var(--tm-accent)",
                     background: "var(--tm-accent-tint)",
                     borderRadius: "10px",
                     padding: "1px 7px",

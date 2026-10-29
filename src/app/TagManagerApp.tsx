@@ -7,6 +7,7 @@ import { Page } from "azure-devops-ui/Page";
 import { Spinner, SpinnerSize } from "azure-devops-ui/Spinner";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 import { Toast } from "azure-devops-ui/Toast";
+import { ZeroData, ZeroDataActionType } from "azure-devops-ui/ZeroData";
 import { Button } from "azure-devops-ui/Button";
 import { ButtonGroup } from "azure-devops-ui/ButtonGroup";
 import { TagService } from "../services/TagService";
@@ -69,6 +70,8 @@ export const TagManagerApp: React.FC = () => {
   const [tags, setTags] = useState<TagItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Why the first load failed. Shown where the list would be: an empty table there would say the project has no tags.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<DialogState>(null);
   const [alphaFilter, setAlphaFilter] = useState<string | null>(null);
@@ -181,6 +184,7 @@ export const TagManagerApp: React.FC = () => {
     if (!options?.silent) {
       setLoading(true);
       setError(null);
+      setLoadError(null);
     }
     try {
       const [result, cache] = await Promise.all([
@@ -209,7 +213,9 @@ export const TagManagerApp: React.FC = () => {
         })
         .catch((e) => setError(sanitizeError(e)));
     } catch (e) {
-      setError(sanitizeError(e));
+      // A reload behind a table the user is working in keeps that table and reports in the banner.
+      if (options?.silent) setError(sanitizeError(e));
+      else setLoadError(sanitizeError(e));
     } finally {
       setLoading(false);
     }
@@ -457,6 +463,15 @@ export const TagManagerApp: React.FC = () => {
               <div className="tm-spinner-wrapper">
                 <Spinner size={SpinnerSize.large} label="Loading tags…" />
               </div>
+            ) : loadError !== null ? (
+              <ZeroData
+                primaryText="Couldn't load tags"
+                secondaryText={loadError}
+                imageAltText=""
+                actionText="Try again"
+                actionType={ZeroDataActionType.ctaButton}
+                onActionClick={() => void loadTags()}
+              />
             ) : (
               <TagTable
                 tags={pagedTags}

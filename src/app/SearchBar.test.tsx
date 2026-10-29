@@ -25,6 +25,13 @@ describe("SearchBar", () => {
     expect(screen.getByRole("button", { name: "Clear search" })).toBeInTheDocument();
   });
 
+  it("draws the clear button with the host's Clear icon, not a typed character", () => {
+    render(<SearchBar value="alpha" onChange={jest.fn()} />);
+    const clear = screen.getByRole("button", { name: "Clear search" });
+    expect(clear).toHaveTextContent("");
+    expect(clear.querySelector('[data-icon="Clear"]')).toBeInTheDocument();
+  });
+
   it("calls onChange when the user types", async () => {
     const user = userEvent.setup();
     const onChange = jest.fn();

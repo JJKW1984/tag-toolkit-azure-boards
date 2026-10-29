@@ -18,16 +18,87 @@
   --tm-text-secondary: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
   --tm-focus: var(--focus-border-color, #0078d4);
   --tm-error: var(--status-error-foreground, #c4314b);
+  --tm-text-primary: var(--text-primary-color, #1e1e1e);
+  --tm-accent: var(--communication-foreground, #0078d4);
 }
 
 /*
-  The merge-target and rename fields are plain inputs, so they have to draw their own focus ring. The outline is
-  inset so the dialog's scroll container cannot clip it, and it matches the host controls' blue.
+  The search, merge-target and rename fields are plain inputs, so they have to draw their own focus ring. The
+  outline is inset so a scroll container cannot clip it, and it matches the host controls' blue.
 */
+.tm-search-input:focus,
 .tm-merge-target:focus,
 .tm-rename-input:focus {
   outline: 2px solid var(--tm-focus);
   outline-offset: -2px;
+}
+
+/* Search field: a plain input with our own clear button at the right edge. */
+.tm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.tm-search-input {
+  flex: 1;
+  padding: 4px 28px 4px 8px;
+  border: 1px solid var(--tm-border);
+  border-radius: 2px;
+  font-size: 13px;
+  color: var(--tm-text-primary);
+  background: var(--tm-surface);
+}
+
+/* The browser draws its own clear button in a search input; ours replaces it, so there is only one. */
+.tm-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.tm-search-clear {
+  position: absolute;
+  inset-inline-end: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: var(--tm-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tm-search-clear:hover {
+  background: var(--tm-hover);
+}
+
+.tm-search-clear:focus-visible {
+  outline: 2px solid var(--tm-focus);
+  outline-offset: -2px;
+}
+
+/*
+  The tag name in the table. The cell is nowrap and clips, so a long name has to shorten itself with an ellipsis
+  (the full name is in the button's tooltip) instead of being cut off mid-letter.
+*/
+.tm-tag-row {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tm-tag-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The line beside a hand-built field that says how to finish with it, or what it is doing. */

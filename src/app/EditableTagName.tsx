@@ -200,7 +200,7 @@ export const EditableTagName: React.FC<EditableTagNameProps> = ({
               border: "1px solid var(--tm-border)",
               borderRadius: "2px",
               background: "var(--tm-surface)",
-              color: "var(--text-primary-color, #1e1e1e)",
+              color: "var(--tm-text-primary)",
             }}
           />
           {saving ? (
@@ -228,7 +228,8 @@ export const EditableTagName: React.FC<EditableTagNameProps> = ({
       type="button"
       data-rename-trigger={name}
       aria-label={`Rename tag ${name}`}
-      title="Double-click, Enter, or F2 to rename"
+      // The full name too, since a long one is shortened with an ellipsis.
+      title={`${name}\nDouble-click, Enter, or F2 to rename`}
       onDoubleClick={startEditing}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === "F2" || e.key === " ") {
@@ -250,19 +251,19 @@ export const EditableTagName: React.FC<EditableTagNameProps> = ({
         color: "inherit",
         font: "inherit",
         padding: 0,
+        minWidth: 0,
+        maxWidth: "100%",
         borderRadius: "2px",
-        outline: focused
-          ? "2px solid var(--communication-foreground, #0078d4)"
-          : "none",
+        outline: focused ? "2px solid var(--tm-focus)" : "none",
         outlineOffset: "2px",
       }}
     >
-      {name}
+      <span className="tm-tag-name">{name}</span>
       {(hovered || focused) && (
         <span
           aria-hidden="true"
           title="Rename"
-          style={{ display: "inline-flex", fontSize: "12px", color: "var(--tm-text-secondary)" }}
+          style={{ display: "inline-flex", flex: "none", fontSize: "12px", color: "var(--tm-text-secondary)" }}
         >
           <Icon iconName="Edit" size={IconSize.inherit} />
         </span>

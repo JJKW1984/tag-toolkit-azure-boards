@@ -146,7 +146,7 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key={`name-${item.id}`}
         >
-          <span data-testid="tag-row" data-tag-name={item.name}>
+          <span className="tm-tag-row" data-testid="tag-row" data-tag-name={item.name}>
             {onRename ? (
               <EditableTagName
                 name={item.name}

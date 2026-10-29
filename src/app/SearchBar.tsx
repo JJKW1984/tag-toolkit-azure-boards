@@ -1,4 +1,5 @@
 import React from "react";
+import { Icon, IconSize } from "azure-devops-ui/Icon";
 
 interface SearchBarProps {
   value: string;
@@ -11,54 +12,18 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   onChange,
   placeholder = "Search tags…",
 }) => (
-  <div
-    style={{
-      position: "relative",
-      display: "flex",
-      alignItems: "center",
-      flex: "1 1 240px",
-      minWidth: 0,
-    }}
-  >
+  <div className="tm-search">
     <input
       type="search"
+      className="tm-search-input"
       aria-label="Search tags"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      style={{
-        flex: 1,
-        padding: "4px 28px 4px 8px",
-        border: "1px solid var(--tm-border)",
-        borderRadius: "2px",
-        fontSize: "13px",
-        color: "var(--text-primary-color, #1e1e1e)",
-        background: "var(--tm-surface)",
-      }}
     />
     {value && (
-      <button
-        type="button"
-        aria-label="Clear search"
-        onClick={() => onChange("")}
-        style={{
-          position: "absolute",
-          right: "4px",
-          width: "24px",
-          height: "24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          border: "none",
-          background: "none",
-          cursor: "pointer",
-          color: "var(--tm-text-secondary)",
-          fontSize: "16px",
-          lineHeight: 1,
-          padding: 0,
-        }}
-      >
-        ×
+      <button type="button" className="tm-search-clear" aria-label="Clear search" onClick={() => onChange("")}>
+        <Icon iconName="Clear" size={IconSize.inherit} />
       </button>
     )}
   </div>

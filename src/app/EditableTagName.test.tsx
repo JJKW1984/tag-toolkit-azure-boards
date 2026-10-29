@@ -21,6 +21,16 @@ describe("EditableTagName — display mode", () => {
     expect(screen.getByText("old-tag")).toBeInTheDocument();
   });
 
+  it("shortens a name that does not fit, and still gives its full text and how to rename it on hover", () => {
+    const long = "a-very-long-tag-name-".repeat(6);
+    render(<EditableTagName {...defaultProps} name={long} />);
+    const button = screen.getByRole("button", { name: `Rename tag ${long}` });
+    // The ellipsis is drawn by CSS on this element.
+    expect(button.querySelector(".tm-tag-name")).toHaveTextContent(long);
+    expect(button).toHaveAttribute("title", expect.stringContaining(long));
+    expect(button).toHaveAttribute("title", expect.stringContaining("Double-click, Enter, or F2 to rename"));
+  });
+
   it("does not show an input initially", () => {
     render(<EditableTagName {...defaultProps} />);
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
@@ -43,7 +53,7 @@ describe("EditableTagName — display mode", () => {
     render(<EditableTagName {...defaultProps} />);
     await user.tab();
     expect(screen.getByRole("button", { name: /Rename tag old-tag/i })).toHaveStyle(
-      "outline: 2px solid var(--communication-foreground, #0078d4)"
+      "outline: 2px solid var(--tm-focus)"
     );
   });
 });

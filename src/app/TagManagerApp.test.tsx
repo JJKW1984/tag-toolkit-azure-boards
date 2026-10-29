@@ -132,6 +132,59 @@ describe("TagManagerApp", () => {
     });
   });
 
+  describe("when the tags fail to load", () => {
+    it("says so, rather than that the project has no tags, and offers to try again", async () => {
+      mockTagService.getAllTags.mockRejectedValueOnce(new Error("boom"));
+
+      render(<TagManagerApp />);
+
+      expect(await screen.findByText("Couldn't load tags")).toBeInTheDocument();
+      expect(screen.getByText("boom")).toBeInTheDocument();
+      expect(screen.queryByText("No tags found")).not.toBeInTheDocument();
+      // The reason is in the place the list would be, not repeated in a page banner as well.
+      expect(screen.getAllByText("boom")).toHaveLength(1);
+    });
+
+    it("loads the list when the user tries again", async () => {
+      mockTagService.getAllTags
+        .mockRejectedValueOnce(new Error("boom"))
+        .mockResolvedValueOnce([{ id: "1", name: "alpha", url: "u" }]);
+
+      render(<TagManagerApp />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+
+      expect(await screen.findByText("alpha")).toBeInTheDocument();
+      expect(screen.queryByText("Couldn't load tags")).not.toBeInTheDocument();
+      expect(screen.queryByText("boom")).not.toBeInTheDocument();
+    });
+
+    it("keeps the table when a reload behind it fails", async () => {
+      mockTagService.getAllTags
+        .mockResolvedValueOnce([
+          { id: "1", name: "one", url: "u" },
+          { id: "2", name: "two", url: "u" },
+        ])
+        .mockRejectedValueOnce(new Error("reload down"));
+      mockTagService.mergeTags.mockResolvedValue({
+        succeeded: [{ source: { id: "2", name: "two", url: "u" }, affectedCount: 1 }],
+        failed: [],
+      });
+
+      render(<TagManagerApp />);
+      await screen.findByText("two");
+      fireEvent.click(screen.getByLabelText("Select one"));
+      fireEvent.click(screen.getByLabelText("Select two"));
+      fireEvent.click(screen.getByRole("button", { name: /^Merge/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /^Keep “one”/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+
+      expect(await screen.findByText("reload down")).toBeInTheDocument();
+      expect(screen.queryByText("Couldn't load tags")).not.toBeInTheDocument();
+      expect(screen.getByText("one")).toBeInTheDocument();
+    });
+  });
+
   it("says counts have not loaded, and what to do, when no cache exists", async () => {
     mockTagService.getAllTags.mockResolvedValue([]);
     mockTagCountCacheService.getCache.mockResolvedValue(null);
