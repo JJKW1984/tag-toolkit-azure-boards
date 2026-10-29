@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TagTable } from "./TagTable";
+import { SortState } from "../utils/sortTags";
 
 describe("TagTable", () => {
   it("shows zero data state when no tags are available", () => {
@@ -16,6 +17,59 @@ describe("TagTable", () => {
     );
 
     expect(screen.getByText("No tags found")).toBeInTheDocument();
+  });
+
+  it("tells a first-time user what to do when the project has no tags", () => {
+    render(
+      <TagTable
+        tags={[]}
+        selectedIds={new Set()}
+        onToggle={jest.fn()}
+        onToggleAll={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText("No tags found")).toBeInTheDocument();
+    expect(screen.getByText(/Tags you add to work items will appear here/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+  });
+
+  it("explains an empty search and offers to clear the filters", () => {
+    const onClearFilters = jest.fn();
+    render(
+      <TagTable
+        tags={[]}
+        selectedIds={new Set()}
+        onToggle={jest.fn()}
+        onToggleAll={jest.fn()}
+        isFiltered={true}
+        onClearFilters={onClearFilters}
+      />
+    );
+
+    expect(screen.getByText("No tags match your filters")).toBeInTheDocument();
+    expect(screen.queryByText("No tags found")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("survives going from rows to no rows and back (hook order stays stable)", () => {
+    const props = {
+      selectedIds: new Set<string>(),
+      onToggle: jest.fn(),
+      onToggleAll: jest.fn(),
+    };
+    const rows = [{ id: "1", name: "alpha", url: "u1" }];
+
+    const { rerender } = render(<TagTable tags={rows} {...props} />);
+    expect(screen.getByText("alpha")).toBeInTheDocument();
+
+    rerender(<TagTable tags={[]} {...props} />);
+    expect(screen.getByText("No tags found")).toBeInTheDocument();
+
+    rerender(<TagTable tags={rows} {...props} />);
+    expect(screen.getByText("alpha")).toBeInTheDocument();
   });
 
   it("toggles row selection and select-all", () => {
@@ -41,6 +95,67 @@ describe("TagTable", () => {
 
     expect(onToggleAll).toHaveBeenCalled();
     expect(onToggle).toHaveBeenCalledWith("1");
+  });
+});
+
+describe("TagTable — sorting", () => {
+  const tags = [
+    { id: "1", name: "alpha", url: "u", count: 3 },
+    { id: "2", name: "beta", url: "u", count: 0 },
+  ];
+  const renderTable = (sort: SortState, onSort = jest.fn()) => {
+    render(
+      <TagTable
+        tags={tags}
+        selectedIds={new Set()}
+        onToggle={jest.fn()}
+        onToggleAll={jest.fn()}
+        sort={sort}
+        onSort={onSort}
+      />
+    );
+    return onSort;
+  };
+
+  it("lets the Tag and Work items columns be sorted, and says which one is", () => {
+    renderTable({ key: "count", direction: "asc" });
+
+    expect(screen.getByRole("button", { name: "Tag" }).closest("th")).not.toHaveAttribute("aria-sort");
+    expect(screen.getByRole("button", { name: "Work items (org-wide)" }).closest("th")).toHaveAttribute(
+      "aria-sort",
+      "ascending"
+    );
+  });
+
+  it("reports a descending sort on the active column", () => {
+    renderTable({ key: "name", direction: "desc" });
+
+    expect(screen.getByRole("button", { name: "Tag" }).closest("th")).toHaveAttribute(
+      "aria-sort",
+      "descending"
+    );
+  });
+
+  it("asks for the least-used tags first when the count header is chosen", () => {
+    const onSort = renderTable({ key: "name", direction: "asc" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Work items (org-wide)" }));
+
+    expect(onSort).toHaveBeenCalledWith({ key: "count", direction: "asc" });
+  });
+
+  it("flips the direction when the active column's header is chosen again", () => {
+    const onSort = renderTable({ key: "name", direction: "asc" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Tag" }));
+
+    expect(onSort).toHaveBeenCalledWith({ key: "name", direction: "desc" });
+  });
+
+  it("does not make the selection column sortable", () => {
+    renderTable({ key: "name", direction: "asc" });
+
+    expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 });
 

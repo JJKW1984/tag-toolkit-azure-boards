@@ -22,6 +22,7 @@ root README and the source code.
 - Merge target selection.
 - Branch-based publishing and sharing.
 - Live-test harness, including the API and local Playwright phases.
+- [UI review and hardening](superpowers/specs/2026-10-28-ui-review-and-hardening.md): findings, what shipped, and what is left for later.
 
 ### Implementation plans
 

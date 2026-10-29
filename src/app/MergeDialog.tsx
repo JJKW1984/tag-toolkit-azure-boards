@@ -5,10 +5,15 @@ import { FormItem } from "azure-devops-ui/FormItem";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 import { Pill, PillSize, PillVariant } from "azure-devops-ui/Pill";
 import { TagItem } from "../types";
+import { CountsNote, TagCount } from "./TagCounts";
 
 interface MergeDialogProps {
   sources: TagItem[];
   allTags: TagItem[];
+  /** When the per-tag counts were taken (ISO), or null when they have never loaded. */
+  countsUpdatedAt?: string | null;
+  /** Set while the work runs, e.g. "Merging…". Locks the dialog and replaces the confirm label. */
+  busyLabel?: string | null;
   onConfirm: (targetName: string) => void;
   onCancel: () => void;
 }
@@ -16,6 +21,8 @@ interface MergeDialogProps {
 export const MergeDialog: React.FC<MergeDialogProps> = ({
   sources,
   allTags,
+  countsUpdatedAt,
+  busyLabel,
   onConfirm,
   onCancel,
 }) => {
@@ -48,6 +55,46 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
   );
   const remainingSourceCount = targetIsSource ? sources.length - 1 : sources.length;
   const isValid = trimmed.length > 0 && remainingSourceCount > 0;
+
+  const these = remainingSourceCount === 1 ? "it" : "them";
+  const retagged = (
+    <>
+      work items that use {these} are re-tagged “{trimmed}”.
+    </>
+  );
+  let warning: React.ReactNode;
+  if (trimmed.length === 0) {
+    warning =
+      "Choose or name the tag to keep. Every other selected tag is deleted, and work items that use them are re-tagged with the tag you keep.";
+  } else if (targetIsSource && remainingSourceCount === 0) {
+    warning = (
+      <>
+        “{trimmed}” is the only selected tag. Choose a different tag to merge it
+        into.
+      </>
+    );
+  } else if (targetIsSource) {
+    warning = (
+      <>
+        “{trimmed}” is kept. The other{" "}
+        {remainingSourceCount === 1 ? "tag is" : `${remainingSourceCount} tags are`} deleted, and{" "}
+        {retagged}
+      </>
+    );
+  } else {
+    warning = (
+      <>
+        The {remainingSourceCount === 1 ? "selected tag is" : `${remainingSourceCount} selected tags are`}{" "}
+        deleted, and {retagged}
+        {isNewTag && (
+          <>
+            {" "}
+            “{trimmed}” will be created.
+          </>
+        )}
+      </>
+    );
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTargetName(e.target.value);
@@ -99,33 +146,31 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
 
   return (
     <Dialog
-      titleProps={{ text: "Merge Tags" }}
+      titleProps={{ text: "Merge tags" }}
       footerButtonProps={[
-        { text: "Cancel", onClick: onCancel },
+        { text: "Cancel", onClick: onCancel, disabled: Boolean(busyLabel) },
         {
-          text: "Merge",
+          text: busyLabel ?? "Merge",
           primary: true,
           danger: true,
-          disabled: !isValid,
+          disabled: !isValid || Boolean(busyLabel),
           onClick: () => onConfirm(trimmed),
           iconProps: { iconName: "BranchMerge" },
         },
       ]}
-      onDismiss={onCancel}
+      onDismiss={busyLabel ? () => {} : onCancel}
     >
       <div data-testid="merge-dialog">
         <MessageCard severity={MessageCardSeverity.Warning}>
-        {targetIsSource
-          ? `The following tag${remainingSourceCount !== 1 ? "s" : ""} will be merged into the target and removed. The target tag will be kept.`
-          : `The following tag${remainingSourceCount !== 1 ? "s" : ""} will be merged into the target and removed from the project.`}
-      </MessageCard>
+          <span data-testid="merge-warning">{warning}</span>
+        </MessageCard>
       <div
         style={{
           fontSize: "11px",
           fontWeight: 600,
           textTransform: "uppercase",
           letterSpacing: "0.5px",
-          color: "var(--palette-neutral-60, #666)",
+          color: "var(--tm-text-secondary)",
           margin: "12px 0 8px",
         }}
       >
@@ -155,11 +200,13 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                 iconProps={{ iconName: isTarget ? "CheckMark" : "Tag" }}
               >
                 {t.name}
+                <TagCount tag={t} />
               </Pill>
             </div>
           );
         })}
       </div>
+      <CountsNote tags={sources} updatedAt={countsUpdatedAt} />
       <FormItem label="Target tag">
         <div>
           <input
@@ -175,20 +222,20 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
               padding: "4px 8px",
               fontSize: "14px",
               lineHeight: "20px",
-              border: "1px solid var(--palette-neutral-20, #c8c6c4)",
+              border: "1px solid var(--tm-border)",
               borderRadius: "2px 2px 0 0",
               borderBottom: "none",
-              background: "var(--callout-background-color, #fff)",
+              background: "var(--tm-surface)",
               color: "var(--text-primary-color, #1e1e1e)",
               outline: "none",
             }}
           />
           <div
             style={{
-              border: "1px solid var(--palette-neutral-20, #c8c6c4)",
+              border: "1px solid var(--tm-border)",
               borderTop: "none",
               borderRadius: "0 0 2px 2px",
-              background: "var(--callout-background-color, #fff)",
+              background: "var(--tm-surface)",
               maxHeight: "160px",
               overflowY: "auto",
             }}
@@ -203,7 +250,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                   cursor: "pointer",
                   background:
                     index === highlightedIndex
-                      ? "var(--palette-neutral-8, #e8e8e8)"
+                      ? "var(--tm-hover)"
                       : "transparent",
                 }}
               >
@@ -225,11 +272,11 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                   cursor: "pointer",
                   background:
                     highlightedIndex === suggestions.length
-                      ? "var(--palette-neutral-8, #e8e8e8)"
+                      ? "var(--tm-hover)"
                       : "transparent",
                   borderTop:
                     suggestions.length > 0
-                      ? "1px solid var(--palette-neutral-10, #e0e0e0)"
+                      ? "1px solid var(--tm-divider)"
                       : "none",
                   display: "flex",
                   alignItems: "center",
@@ -248,7 +295,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
                   style={{
                     fontSize: "11px",
                     color: "var(--communication-foreground, #0078d4)",
-                    background: "var(--palette-primary-tint-10, #deecf9)",
+                    background: "var(--tm-accent-tint)",
                     borderRadius: "10px",
                     padding: "1px 7px",
                     fontWeight: 600,

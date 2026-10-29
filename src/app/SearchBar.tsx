@@ -16,9 +16,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       position: "relative",
       display: "flex",
       alignItems: "center",
-      padding: "6px 0 8px",
-      borderBottom: "1px solid var(--palette-neutral-10, #e0e0e0)",
-      marginBottom: "4px",
+      flex: "1 1 240px",
+      minWidth: 0,
     }}
   >
     <input
@@ -30,11 +29,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       style={{
         flex: 1,
         padding: "4px 28px 4px 8px",
-        border: "1px solid var(--palette-neutral-20, #ccc)",
+        border: "1px solid var(--tm-border)",
         borderRadius: "2px",
         fontSize: "13px",
         color: "var(--text-primary-color, #1e1e1e)",
-        background: "var(--palette-neutral-0, #fff)",
+        background: "var(--tm-surface)",
       }}
     />
     {value && (
@@ -45,13 +44,18 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         style={{
           position: "absolute",
           right: "4px",
+          width: "24px",
+          height: "24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
           border: "none",
           background: "none",
           cursor: "pointer",
-          color: "var(--palette-neutral-60, #555)",
+          color: "var(--tm-text-secondary)",
           fontSize: "16px",
           lineHeight: 1,
-          padding: "0 4px",
+          padding: 0,
         }}
       >
         ×

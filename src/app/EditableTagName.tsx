@@ -103,9 +103,9 @@ export const EditableTagName: React.FC<EditableTagNameProps> = ({
             boxSizing: "border-box",
             padding: "2px 6px",
             fontSize: "13px",
-            border: "1px solid var(--palette-neutral-20, #c8c6c4)",
+            border: "1px solid var(--tm-border)",
             borderRadius: "2px",
-            background: "var(--callout-background-color, #fff)",
+            background: "var(--tm-surface)",
             color: "var(--text-primary-color, #1e1e1e)",
           }}
         />
@@ -163,7 +163,7 @@ export const EditableTagName: React.FC<EditableTagNameProps> = ({
         <span
           aria-hidden="true"
           title="Rename"
-          style={{ fontSize: "11px", color: "var(--palette-neutral-30, #aaa)" }}
+          style={{ fontSize: "11px", color: "var(--tm-text-secondary)" }}
         >
           ✎
         </span>

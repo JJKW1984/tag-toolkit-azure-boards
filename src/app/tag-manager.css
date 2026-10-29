@@ -1,7 +1,22 @@
 /* ============================================================
   Tag Toolkit — component styles
-   All ADO CSS tokens (var(--palette-*)) are from azure-devops-ui.
+   Colours come from the --tm-* tokens below, which wrap ADO's host theme variables.
    ============================================================ */
+
+/*
+  Theme tokens. The --palette-* variables ADO provides are bare RGB triplets, so they
+  must be wrapped in rgba(); var(--palette-neutral-20, #ccc) is invalid there and the
+  whole declaration is dropped. The --text-* and --callout-* variables are full colours.
+  Fallbacks are ADO's own defaults, used outside the host (dev server, tests).
+*/
+:root {
+  --tm-divider: rgba(var(--palette-neutral-10, 218, 218, 218), 1);
+  --tm-border: rgba(var(--palette-neutral-20, 200, 200, 200), 1);
+  --tm-hover: rgba(var(--palette-neutral-8, 234, 234, 234), 1);
+  --tm-accent-tint: rgba(var(--palette-primary-tint-30, 222, 236, 249), 1);
+  --tm-surface: var(--callout-background-color, rgba(255, 255, 255, 1));
+  --tm-text-secondary: var(--text-secondary-color, rgba(0, 0, 0, 0.55));
+}
 
 /* Pagination row */
 .tm-pagination {
@@ -10,10 +25,10 @@
   justify-content: flex-end;
   gap: 12px;
   padding: 8px 4px 4px;
-  border-top: 1px solid var(--palette-neutral-10, #e0e0e0);
+  border-top: 1px solid var(--tm-divider);
   margin-top: 4px;
   font-size: 13px;
-  color: var(--palette-neutral-60, #555);
+  color: var(--tm-text-secondary);
 }
 
 /* Loading spinner centering */
@@ -23,32 +38,97 @@
   padding: 32px;
 }
 
-/* Card inner flex-column layout */
+/*
+  ADO's core CSS makes <body> a flex container, so a bare #root is a flex item that shrinks
+  to its content. Without this the whole hub narrows whenever the content is narrow,
+  e.g. when the table is replaced by an empty state.
+*/
+#root {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+  Card inner flex-column layout. The Card's content wrapper is a flex row, so without
+  flex-grow this column sizes to its content: fine for a wide table, but the search bar,
+  tabs and refresh row all narrow to the width of a short empty state.
+*/
 .tm-card-content {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-/* Error message card */
-.tm-error-card {
-  /* MessageCard handles its own layout — reserved for overrides */
+/* Search and the starts-with filter share one row, with the divider beneath both. */
+.tm-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--tm-divider);
+  margin-bottom: 4px;
 }
 
-/* Refresh bar (cache status + manual refresh button) */
+.tm-starts-with {
+  flex: 0 0 auto;
+  width: 220px;
+}
+
+/*
+  The empty states supply no illustration, but ZeroData still reserves a 160px image slot
+  above the heading. The slot is an <img> with no src and no alt text, so collapse it.
+*/
+.tm-card-content .vss-ZeroDataItem--image {
+  display: none;
+}
+
+/* Refresh bar (cache status + manual refresh button + selection summary) */
 .tm-refresh-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 8px 4px 4px;
   font-size: 13px;
 }
 
 .tm-last-updated {
-  color: var(--palette-neutral-40, #888);
+  color: var(--tm-text-secondary);
 }
 
 .tm-refresh-stats {
-  color: var(--palette-neutral-40, #888);
+  color: var(--tm-text-secondary);
   font-size: 12px;
   cursor: help;
+}
+
+/* Work item count inside a dialog pill: separated from the name, digits aligned */
+.tm-pill-count {
+  margin-inline-start: 6px;
+  padding-inline-start: 6px;
+  border-inline-start: 1px solid currentColor;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Explains what the pill counts mean and how old they are */
+.tm-counts-note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--tm-text-secondary);
+}
+
+/* A count that has not been loaded yet */
+.tm-count-unknown {
+  color: var(--tm-text-secondary);
+}
+
+/* Selected-tag summary, right-aligned in the refresh bar */
+.tm-selection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
