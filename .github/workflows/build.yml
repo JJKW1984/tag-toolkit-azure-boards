@@ -11,6 +11,10 @@ on:
     branches:
       - main
       - dev
+  push:
+    branches:
+      - main
+      - dev
 
 permissions:
   contents: read
@@ -28,7 +32,7 @@ jobs:
 
       - uses: pnpm/action-setup@v5
         with:
-          version: 9
+          version: 12
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -39,19 +43,10 @@ jobs:
       - id: resolve-manifest
         name: Resolve manifest and extension ID
         shell: bash
-        run: |
-          TARGET="${{ github.base_ref }}"
-          if [[ -z "$TARGET" ]]; then TARGET="${{ github.ref_name }}"; fi
-          if [[ "$TARGET" == "main" ]]; then
-            echo "extension-id=tag-toolkit-azure-boards"        >> "$GITHUB_OUTPUT"
-            echo "manifest-file=vss-extension.json"    >> "$GITHUB_OUTPUT"
-          else
-            echo "extension-id=tag-toolkit-azure-boards-develop"   >> "$GITHUB_OUTPUT"
-            echo "manifest-file=vss-extension-dev.json"   >> "$GITHUB_OUTPUT"
-          fi
+        run: bash scripts/resolve-manifest.sh "${{ github.base_ref }}" "${{ github.ref_name }}"
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm run build
@@ -104,7 +99,9 @@ jobs:
           path: ${{ steps.package.outputs.vsix-file }}
           if-no-files-found: error
 
+      # Pull requests only build and package; publishing waits for the merge push.
       - name: Publish from VSIX
+        if: github.event_name != 'pull_request'
         uses: jessehouwing/azdo-marketplace/publish@main
         with:
           auth-type: pat
@@ -114,8 +111,19 @@ jobs:
           no-wait-validation: true
 
       - name: Wait for validation
+        if: github.event_name != 'pull_request'
         uses: jessehouwing/azdo-marketplace/wait-for-validation@main
         with:
           auth-type: pat
           token: ${{ secrets.MARKETPLACE_TOKEN }}
-          vsix-file: ${{ steps.package.outputs.vsix-file }} 
+          vsix-file: ${{ steps.package.outputs.vsix-file }}
+
+      - name: Share with organizations
+        if: github.event_name != 'pull_request' && steps.resolve-manifest.outputs.path == 'share' && vars.SHARE_ACCOUNTS != ''
+        uses: jessehouwing/azdo-marketplace/share@main
+        with:
+          auth-type: pat
+          token: ${{ secrets.MARKETPLACE_TOKEN }}
+          publisher-id: ${{ env.PUBLISHER_ID }}
+          extension-id: ${{ steps.resolve-manifest.outputs.extension-id }}
+          accounts: ${{ vars.SHARE_ACCOUNTS }}

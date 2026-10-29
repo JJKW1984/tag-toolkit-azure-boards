@@ -7,6 +7,7 @@ const mockTagService = {
   deleteTagById: jest.fn(),
   renameTagById: jest.fn(),
   mergeTag: jest.fn(),
+  mergeTags: jest.fn(),
 };
 
 jest.mock("../services/TagService", () => ({
@@ -18,7 +19,7 @@ const mockTagCountCacheService = {
   setCache: jest.fn(),
   fetchCounts: jest.fn(),
   refreshCache: jest.fn(),
-  isStaleCacheOrMissing: jest.fn(),
+  shouldAutoRefresh: jest.fn(),
 };
 
 jest.mock("../services/TagCountCacheService", () => ({
@@ -39,17 +40,18 @@ describe("TagManagerApp", () => {
       affectedCount: 1,
       workItemIds: [1],
     });
+    mockTagService.mergeTags.mockResolvedValue({ succeeded: [], failed: [] });
 
     // Default: no cache, not stale (no auto-refresh)
     mockTagCountCacheService.getCache.mockResolvedValue(null);
-    mockTagCountCacheService.isStaleCacheOrMissing.mockReturnValue(false);
+    mockTagCountCacheService.shouldAutoRefresh.mockResolvedValue(false);
     mockTagCountCacheService.refreshCache.mockResolvedValue({
       counts: {},
       lastUpdated: new Date().toISOString(),
     });
   });
 
-  it("loads tags and renders Delete, Merge, and Refresh Counts buttons", async () => {
+  it("loads tags and renders Delete, Merge, and Refresh counts buttons", async () => {
     mockTagService.getAllTags.mockResolvedValue([
       { id: "1", name: "alpha", url: "u" },
       { id: "2", name: "beta", url: "u" },
@@ -65,7 +67,7 @@ describe("TagManagerApp", () => {
 
     expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Merge" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Refresh Counts" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh counts" })).not.toBeDisabled();
     expect(screen.queryByRole("button", { name: /^Count/ })).toBeNull();
   });
 
@@ -87,6 +89,39 @@ describe("TagManagerApp", () => {
     expect(mergeIndex).toBeLessThan(deleteIndex);
   });
 
+  it("excludes the tag selected as target from the sources sent to mergeTags", async () => {
+    mockTagService.getAllTags.mockResolvedValue([
+      { id: "1", name: "one", url: "u" },
+      { id: "2", name: "two", url: "u" },
+    ]);
+
+    render(<TagManagerApp />);
+
+    await waitFor(() => {
+      expect(screen.getByText("one")).toBeInTheDocument();
+    });
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[1]); // row for "one"
+    fireEvent.click(checkboxes[2]); // row for "two"
+
+    fireEvent.click(screen.getByRole("button", { name: /^Merge/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Keep “one”/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+
+    await waitFor(() => {
+      expect(mockTagService.mergeTags).toHaveBeenCalledWith(
+        [{ id: "2", name: "two", url: "u" }],
+        "one"
+      );
+    });
+  });
+
   it("shows an error card when loading fails", async () => {
     mockTagService.getAllTags.mockRejectedValue(new Error("boom"));
 
@@ -97,16 +132,104 @@ describe("TagManagerApp", () => {
     });
   });
 
-  it("shows 'Never' as last updated when no cache exists", async () => {
+  describe("when the tags fail to load", () => {
+    it("says so, rather than that the project has no tags, and offers to try again", async () => {
+      mockTagService.getAllTags.mockRejectedValueOnce(new Error("boom"));
+
+      render(<TagManagerApp />);
+
+      expect(await screen.findByText("Couldn't load tags")).toBeInTheDocument();
+      expect(screen.getByText("boom")).toBeInTheDocument();
+      expect(screen.queryByText("No tags found")).not.toBeInTheDocument();
+      // The reason is in the place the list would be, not repeated in a page banner as well.
+      expect(screen.getAllByText("boom")).toHaveLength(1);
+    });
+
+    it("loads the list when the user tries again", async () => {
+      mockTagService.getAllTags
+        .mockRejectedValueOnce(new Error("boom"))
+        .mockResolvedValueOnce([{ id: "1", name: "alpha", url: "u" }]);
+
+      render(<TagManagerApp />);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+
+      expect(await screen.findByText("alpha")).toBeInTheDocument();
+      expect(screen.queryByText("Couldn't load tags")).not.toBeInTheDocument();
+      expect(screen.queryByText("boom")).not.toBeInTheDocument();
+    });
+
+    it("keeps the table when a reload behind it fails", async () => {
+      mockTagService.getAllTags
+        .mockResolvedValueOnce([
+          { id: "1", name: "one", url: "u" },
+          { id: "2", name: "two", url: "u" },
+        ])
+        .mockRejectedValueOnce(new Error("reload down"));
+      mockTagService.mergeTags.mockResolvedValue({
+        succeeded: [{ source: { id: "2", name: "two", url: "u" }, affectedCount: 1 }],
+        failed: [],
+      });
+
+      render(<TagManagerApp />);
+      await screen.findByText("two");
+      fireEvent.click(screen.getByLabelText("Select one"));
+      fireEvent.click(screen.getByLabelText("Select two"));
+      fireEvent.click(screen.getByRole("button", { name: /^Merge/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /^Keep “one”/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+
+      expect(await screen.findByText("reload down")).toBeInTheDocument();
+      expect(screen.queryByText("Couldn't load tags")).not.toBeInTheDocument();
+      expect(screen.getByText("one")).toBeInTheDocument();
+    });
+  });
+
+  it("says counts have not loaded, and what to do, when no cache exists", async () => {
     mockTagService.getAllTags.mockResolvedValue([]);
     mockTagCountCacheService.getCache.mockResolvedValue(null);
 
     render(<TagManagerApp />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Last updated:/)).toBeInTheDocument();
-      expect(screen.getByText(/Never/)).toBeInTheDocument();
+      expect(screen.getByText(/Counts haven't loaded yet/)).toBeInTheDocument();
     });
+    expect(screen.queryByText(/Last updated:/)).not.toBeInTheDocument();
+  });
+
+  it("shows a no-match state after a search and restores the list when filters are cleared", async () => {
+    mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "alpha", url: "u" }]);
+
+    render(<TagManagerApp />);
+    await screen.findByText("alpha");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search tags" }), {
+      target: { value: "zzz" },
+    });
+    expect(screen.getByText("No tags match your filters")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+
+    expect(await screen.findByText("alpha")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search tags" })).toHaveValue("");
+  });
+
+  it("passes the cache age to the delete dialog", async () => {
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "alpha", url: "u" }]);
+    mockTagCountCacheService.getCache.mockResolvedValue({
+      counts: { alpha: 12 },
+      lastUpdated: threeHoursAgo,
+    });
+
+    render(<TagManagerApp />);
+    await screen.findByText("alpha");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select alpha" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete/ }));
+
+    expect(await screen.findByTestId("counts-note")).toHaveTextContent("counted 3 hours ago");
+    expect(screen.getByTestId("tag-count-alpha")).toHaveTextContent("12");
   });
 
   it("shows formatted timestamp and populates counts when cache exists", async () => {
@@ -127,7 +250,74 @@ describe("TagManagerApp", () => {
     expect(screen.getByText(/Last updated:/)).toBeInTheDocument();
   });
 
-  it("clicking Refresh Counts calls refreshCache and updates counts", async () => {
+  describe("last refresh diagnostics", () => {
+    const withStats = (stats: Record<string, unknown> | undefined) => {
+      mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "bug", url: "u" }]);
+      mockTagCountCacheService.getCache.mockResolvedValue({
+        counts: { bug: 1 },
+        lastUpdated: "2026-04-26T10:00:00.000Z",
+        stats,
+      });
+    };
+
+    it("summarizes the strategy, requests, rows and duration of the last refresh", async () => {
+      withStats({ strategy: "aggregate", requests: 3, retries: 1, rows: 1200, durationMs: 8400 });
+
+      render(<TagManagerApp />);
+
+      const stats = await screen.findByTestId("refresh-stats");
+      expect(stats).toHaveTextContent("Aggregate");
+      expect(stats).toHaveTextContent("3 requests");
+      expect(stats).toHaveTextContent(/1[,.\s\u202f\u00a0]?200 rows/);
+      expect(stats).toHaveTextContent("8.4s");
+      expect(stats).toHaveAttribute("title", expect.stringContaining("1 throttle retry"));
+    });
+
+    it("labels the crawl fallback and exposes the reason on hover", async () => {
+      withStats({
+        strategy: "crawl",
+        requests: 2,
+        retries: 0,
+        rows: 50000,
+        durationMs: 120000,
+        fallbackReason: "Analytics OData: 400 bad $apply",
+      });
+
+      render(<TagManagerApp />);
+
+      const stats = await screen.findByTestId("refresh-stats");
+      expect(stats).toHaveTextContent("Crawl (fallback)");
+      expect(stats).toHaveAttribute("title", expect.stringContaining("400 bad $apply"));
+    });
+
+    it("renders nothing for caches written before stats existed", async () => {
+      withStats(undefined);
+
+      render(<TagManagerApp />);
+
+      await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+      expect(screen.queryByTestId("refresh-stats")).not.toBeInTheDocument();
+    });
+
+    it("updates after a manual refresh", async () => {
+      mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "ops", url: "u" }]);
+      mockTagCountCacheService.refreshCache.mockResolvedValue({
+        counts: { ops: 5 },
+        lastUpdated: new Date().toISOString(),
+        stats: { strategy: "aggregate", requests: 7, retries: 0, rows: 40, durationMs: 900 },
+      });
+
+      render(<TagManagerApp />);
+      await waitFor(() => expect(screen.getByText("ops")).toBeInTheDocument());
+      expect(screen.queryByTestId("refresh-stats")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Refresh counts" }));
+
+      expect(await screen.findByTestId("refresh-stats")).toHaveTextContent("7 requests");
+    });
+  });
+
+  it("clicking Refresh counts calls refreshCache and updates counts", async () => {
     mockTagService.getAllTags.mockResolvedValue([
       { id: "1", name: "ops", url: "u" },
     ]);
@@ -142,7 +332,7 @@ describe("TagManagerApp", () => {
       expect(screen.getByText("ops")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Refresh Counts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh counts" }));
 
     await waitFor(() => {
       expect(screen.getByText("99")).toBeInTheDocument();
@@ -155,7 +345,7 @@ describe("TagManagerApp", () => {
     mockTagService.getAllTags.mockResolvedValue([
       { id: "1", name: "infra", url: "u" },
     ]);
-    mockTagCountCacheService.isStaleCacheOrMissing.mockReturnValue(true);
+    mockTagCountCacheService.shouldAutoRefresh.mockResolvedValue(true);
     mockTagCountCacheService.refreshCache.mockResolvedValue({
       counts: { infra: 13 },
       lastUpdated: new Date().toISOString(),
@@ -201,5 +391,12 @@ describe("TagManagerApp", () => {
       expect(container.querySelector('[data-icon="BranchMerge"]')).not.toBeNull();
       expect(container.querySelector('[data-icon="NumberSymbol"]')).toBeNull();
     });
+  });
+
+  it("exposes a root test hook once the hub has rendered", async () => {
+    render(<TagManagerApp />);
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="tag-manager"]')).not.toBeNull()
+    );
   });
 });

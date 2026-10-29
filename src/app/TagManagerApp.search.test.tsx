@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockTagService = {
@@ -77,25 +77,27 @@ describe("TagManagerApp — search filter", () => {
     await waitFor(() => expect(screen.getByText("alpha")).toBeInTheDocument());
 
     // "a" matches alpha (has 'a'), beta (has 'a'), gamma (has 'a') — all three
-    // Then alpha-filter "G" keeps only tags starting with G => gamma
+    // Then the starts-with filter "G" keeps only tags starting with G => gamma
     await user.type(screen.getByRole("searchbox"), "a");
-    await user.click(screen.getByRole("button", { name: "G" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Starts with" }), "G");
 
     expect(screen.getByText("gamma")).toBeInTheDocument();
     expect(screen.queryByText("alpha")).not.toBeInTheDocument();
     expect(screen.queryByText("beta")).not.toBeInTheDocument();
   });
 
-  it("alpha nav disables letters not present in search results", async () => {
+  it("starts-with filter only offers letters present in search results", async () => {
     const user = userEvent.setup();
     render(<TagManagerApp />);
     await waitFor(() => expect(screen.getByText("alpha")).toBeInTheDocument());
 
-    // After searching "alpha", only matching letters are rendered in alpha nav.
+    // After searching "alpha", only matching letters are offered.
     await user.type(screen.getByRole("searchbox"), "alpha");
 
-    expect(screen.queryByRole("button", { name: "B" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "G" })).not.toBeInTheDocument();
+    const letters = within(screen.getByRole("combobox", { name: "Starts with" }));
+    expect(letters.getByRole("option", { name: "A" })).toBeInTheDocument();
+    expect(letters.queryByRole("option", { name: "B" })).not.toBeInTheDocument();
+    expect(letters.queryByRole("option", { name: "G" })).not.toBeInTheDocument();
   });
 
   it("changing search query resets the current page to 1", async () => {

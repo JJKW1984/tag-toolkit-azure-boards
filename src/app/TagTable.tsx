@@ -1,23 +1,33 @@
 // src/app/TagTable.tsx
-import React, { useMemo } from "react";
+import React, { useLayoutEffect, useMemo, useRef } from "react";
 import {
-  ColumnFillId,
+  ColumnJustification,
+  ColumnSorting,
   ITableColumn,
   SimpleTableCell,
+  SortOrder,
   Table,
 } from "azure-devops-ui/Table";
 import { ObservableValue } from "azure-devops-ui/Core/Observable";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
-import { Checkbox } from "azure-devops-ui/Checkbox";
-import { ZeroData } from "azure-devops-ui/ZeroData";
+import { Checkbox, TriStateCheckbox } from "azure-devops-ui/Checkbox";
+import { Observer } from "azure-devops-ui/Observer";
+import { ZeroData, ZeroDataActionType } from "azure-devops-ui/ZeroData";
 import { TagItem } from "../types";
 import { EditableTagName } from "./EditableTagName";
+import { SortKey, SortState } from "../utils/sortTags";
 
 type TagTableBaseProps = {
   tags: TagItem[];
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
   onToggleAll: (select: boolean) => void;
+  /** True when a search or letter filter produced this list, so an empty list is "no matches", not "no tags". */
+  isFiltered?: boolean;
+  onClearFilters?: () => void;
+  /** The active sort. Columns are only sortable when `onSort` is also given. */
+  sort?: SortState;
+  onSort?: (sort: SortState) => void;
 };
 
 type TagTableProps =
@@ -33,27 +43,49 @@ type TagTableProps =
 // Column widths are stable ObservableValues — defined outside the component
 // so they are not recreated on every render (prevents ADO Table column flicker).
 const colWidthSelect = new ObservableValue(48);
-const colWidthName = new ObservableValue(300);
+const colWidthCount = new ObservableValue(190);
 const EMPTY_NAMES: string[] = [];
 
+/** What the checkboxes show: which tags are on this page and which of them are selected. */
+interface SelectionView {
+  tags: TagItem[];
+  selectedIds: Set<string>;
+}
+
 export const TagTable: React.FC<TagTableProps> = (props) => {
-  const { tags, selectedIds, onToggle, onToggleAll, onRename } = props;
+  const { tags, selectedIds, onToggle, onToggleAll, onRename, isFiltered, onClearFilters, sort, onSort } = props;
   const existingNames = onRename ? props.existingNames : EMPTY_NAMES;
 
-  if (tags.length === 0) {
-    return (
-      <ZeroData
-        primaryText="No tags found"
-        secondaryText="This project has no work item tags yet."
-        imageAltText=""
-      />
-    );
-  }
+  // The Table re-renders a row when its item or the item provider changes, never when only `columns`
+  // does, so a cell that reads `selectedIds` through a closure keeps showing what it saw when the row
+  // was created: select-all left every row unticked and Clear selection left them ticked. The
+  // checkboxes read the selection from this observable instead and re-render themselves when it changes.
+  const selectionView = useMemo(() => new ObservableValue<SelectionView>({ tags, selectedIds }), []);
+  // A layout effect, so the checkboxes update before the browser paints the new selection.
+  useLayoutEffect(() => {
+    const current = selectionView.value;
+    if (current.tags !== tags || current.selectedIds !== selectedIds) {
+      selectionView.value = { tags, selectedIds };
+    }
+  }, [selectionView, tags, selectedIds]);
 
-  const allSelected = tags.length > 0 && tags.every((t) => selectedIds.has(t.id));
-  const someSelected = tags.some((t) => selectedIds.has(t.id));
+  // A stable provider keeps the Table from resetting focus and scroll on every render.
+  const tableItems = useMemo(() => new ArrayItemProvider<TagItem>(tags), [tags]);
 
-  const tableItems = new ArrayItemProvider<TagItem>(tags);
+  // A column is sortable when it has sortProps; only the active one carries a sortOrder.
+  const sortProps = (key: SortKey) =>
+    onSort
+      ? {
+          sortProps: {
+            sortOrder:
+              sort?.key === key
+                ? sort.direction === "asc"
+                  ? SortOrder.ascending
+                  : SortOrder.descending
+                : undefined,
+          },
+        }
+      : {};
 
   // Column renderers that close over selectedIds/onToggle are memoized so the
   // Table does not reinitialize on every checkbox toggle.
@@ -67,10 +99,15 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key={`sel-${item.id}`}
         >
-          <Checkbox
-            checked={selectedIds.has(item.id)}
-            onChange={(_e, checked) => onToggle(item.id)}
-          />
+          <Observer view={selectionView}>
+            {({ view }: { view: SelectionView }) => (
+              <Checkbox
+                ariaLabel={`Select ${item.name}`}
+                checked={view.selectedIds.has(item.id)}
+                onChange={(_e, checked) => onToggle(item.id)}
+              />
+            )}
+          </Observer>
         </SimpleTableCell>
       ),
       renderHeaderCell: (columnIndex, tableColumn) => (
@@ -79,11 +116,22 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key="sel-header"
         >
-          <Checkbox
-            triState={true}
-            checked={someSelected && !allSelected ? undefined : allSelected}
-            onChange={(_e, checked) => onToggleAll(checked ?? false)}
-          />
+          <Observer view={selectionView}>
+            {({ view }: { view: SelectionView }) => {
+              const allSelected = view.tags.length > 0 && view.tags.every((t) => view.selectedIds.has(t.id));
+              const someSelected = view.tags.some((t) => view.selectedIds.has(t.id));
+              return (
+                // TriStateCheckbox, not Checkbox: the plain one defaults `checked` to false, so the
+                // `undefined` that means "some selected" became unchecked and the header never showed it.
+                <TriStateCheckbox
+                  ariaLabel="Select all tags on this page"
+                  triState={true}
+                  checked={someSelected && !allSelected ? undefined : allSelected}
+                  onChange={(_e, checked) => onToggleAll(checked ?? false)}
+                />
+              );
+            }}
+          </Observer>
         </SimpleTableCell>
       ),
       readonly: true,
@@ -98,46 +146,99 @@ export const TagTable: React.FC<TagTableProps> = (props) => {
           tableColumn={tableColumn}
           key={`name-${item.id}`}
         >
-          {onRename ? (
-            <EditableTagName
-              name={item.name}
-              onRename={(newName) => onRename(item.id, newName)}
-              onCancel={() => {}}
-              existingNames={existingNames}
-            />
-          ) : (
-            item.name
-          )}
+          <span className="tm-tag-row" data-testid="tag-row" data-tag-name={item.name}>
+            {onRename ? (
+              <EditableTagName
+                name={item.name}
+                onRename={(newName) => onRename(item.id, newName)}
+                onCancel={() => {}}
+                existingNames={existingNames}
+              />
+            ) : (
+              item.name
+            )}
+          </span>
         </SimpleTableCell>
       ),
       readonly: true,
-      width: colWidthName,
+      // Flexes with the card, so the fixed count column never gets pushed out of view.
+      width: -1,
+      ...sortProps("name"),
     },
     {
-      id: ColumnFillId,
-      name: "Work Items",
+      id: "count",
+      name: "Work items (org-wide)",
+      justification: ColumnJustification.Right,
       renderCell: (_rowIndex, columnIndex, tableColumn, item) => (
         <SimpleTableCell
           columnIndex={columnIndex}
           tableColumn={tableColumn}
+          // The column's justification only moves the header; the cell content has to be pushed over too.
+          contentClassName="justify-end"
           key={`count-${item.id}`}
         >
-          {item.count === undefined ? (
-            <span style={{ color: "var(--palette-neutral-30, #aaa)" }}>—</span>
-          ) : (
-            String(item.count)
-          )}
+          <span data-testid="tag-count" data-tag-name={item.name}>
+            {item.count === undefined ? (
+              <span className="tm-count-unknown" role="img" aria-label="Count not loaded">—</span>
+            ) : (
+              String(item.count)
+            )}
+          </span>
         </SimpleTableCell>
       ),
       readonly: true,
-      width: -1,
+      width: colWidthCount,
+      ...sortProps("count"),
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [selectedIds, onToggle, onToggleAll, allSelected, someSelected, onRename, existingNames]);
+  ], [selectionView, onToggle, onToggleAll, onRename, existingNames, onSort, sort?.key, sort?.direction]);
+
+  // The behavior is created once and reads the latest columns and callback through refs.
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
+  const onSortRef = useRef(onSort);
+  onSortRef.current = onSort;
+  const behaviors = useMemo(
+    () => [
+      new ColumnSorting<TagItem>((columnIndex, proposedSortOrder) => {
+        const id = columnsRef.current[columnIndex]?.id;
+        if (id !== "name" && id !== "count") return;
+        onSortRef.current?.({
+          key: id,
+          direction: proposedSortOrder === SortOrder.ascending ? "asc" : "desc",
+        });
+      }),
+    ],
+    []
+  );
+
+  // Every hook above runs on every render; only the output branches below.
+  if (tags.length === 0) {
+    if (isFiltered) {
+      return (
+        <ZeroData
+          primaryText="No tags match your filters"
+          secondaryText="Check the spelling, or clear the search and letter filter to see every tag."
+          imageAltText=""
+          actionText="Clear filters"
+          actionType={ZeroDataActionType.ctaButton}
+          onActionClick={onClearFilters}
+        />
+      );
+    }
+    return (
+      <ZeroData
+        primaryText="No tags found"
+        secondaryText="This project has no work item tags yet. Tags you add to work items will appear here."
+        imageAltText=""
+      />
+    );
+  }
 
   return (
     <Table<TagItem>
       ariaLabel="Work item tags"
+      behaviors={onSort ? behaviors : undefined}
       columns={columns}
       itemProvider={tableItems}
       role="grid"
