@@ -102,6 +102,8 @@ export const TagManagerApp: React.FC = () => {
   }, [searchFiltered, alphaFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTags.length / PAGE_SIZE));
+  // The list can shrink under the page the user is on (a delete or merge), so step from the page that is
+  // shown, not from the stored one, or Previous would land on a page that is still out of range.
   const safePage = Math.min(currentPage, totalPages - 1);
   // Sorted before paging, so the first page really holds the first rows in the chosen order.
   const sortedTags = useMemo(() => sortTags(filteredTags, sort), [filteredTags, sort]);
@@ -462,14 +464,14 @@ export const TagManagerApp: React.FC = () => {
                     text="Previous"
                     iconProps={{ iconName: "ChevronLeft" }}
                     disabled={safePage === 0}
-                    onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                    onClick={() => setCurrentPage(safePage - 1)}
                   />
                   <Button
                     subtle={true}
                     text="Next"
                     iconProps={{ iconName: "ChevronRight" }}
                     disabled={safePage >= totalPages - 1}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                    onClick={() => setCurrentPage(safePage + 1)}
                   />
                 </ButtonGroup>
               </div>

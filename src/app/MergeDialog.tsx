@@ -12,7 +12,7 @@ interface MergeDialogProps {
   allTags: TagItem[];
   /** When the per-tag counts were taken (ISO), or null when they have never loaded. */
   countsUpdatedAt?: string | null;
-  /** Set while the work runs, e.g. "Deleting 2 of 5…". Locks the dialog and replaces the confirm label. */
+  /** Set while the work runs, e.g. "Merging…". Locks the dialog and replaces the confirm label. */
   busyLabel?: string | null;
   onConfirm: (targetName: string) => void;
   onCancel: () => void;

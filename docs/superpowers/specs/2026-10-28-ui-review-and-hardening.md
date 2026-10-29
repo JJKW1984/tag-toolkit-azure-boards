@@ -44,13 +44,13 @@ found in the second run, Enter deleted tags the moment the Delete dialog opened.
 
 ## Completed
 
-Nine commits, in order:
+Nine code commits, in order (a tenth adds this record):
 
 | Commit | Change |
 | --- | --- |
 | `d24a78c` | Call `TagTable` hooks before the empty-state return. |
 | `b6d617e` | Selection matches what is on screen: select-all acts on the current page only, and "N selected · M not shown" is visible. |
-| `7a6e76c` | Dialogs say what a merge or delete touches and how old the counts are; unknown counts render as "—", not 0; column renamed "Work items (org-wide)". |
+| `7a6e76c` | Dialogs say what a merge or delete touches and how old the counts are; counts that have never loaded render as "—", not 0 (a tag missing from a loaded cache still shows 0); column renamed "Work items (org-wide)". |
 | `e6b448f` | Merge and delete confirm with a toast, show progress ("Deleting 2 of 5…"), keep per-tag failures visible and sanitized, keep failed tags selected, and reload behind the table. |
 | `a7be809` | ADO theme tokens used correctly (`rgba(var(--palette-…))`), `#root` flex fix, selection summary moved up, sentence-case labels. |
 | `a411a59` | Delete dialog: Enter no longer confirms; focus starts on Cancel; Escape handled explicitly. |
@@ -138,4 +138,9 @@ Ordered roughly by value. None were in scope for this round (P0/P1, then the emp
   the library issues above.
 - Decide whether `.impeccable/` (critique snapshots) is gitignored or committed. It is untracked.
 - `AGENTS.md` points at a root `GLOSSARY.md` that does not exist.
+- A tag missing from a loaded count cache shows 0 (`?? 0` in `TagManagerApp.tsx`), so "—" and the
+  unknown-counts-last sort rule only apply before the first cache loads. Decide whether a tag created after
+  the last refresh should show "—".
+- Merge's toast sums affected work items per source tag, so an item carrying several source tags is counted
+  more than once.
 - Pagination was kept (25 per page); revisit if large tag sets make it awkward now that sorting exists.
