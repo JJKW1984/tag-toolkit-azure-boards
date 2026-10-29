@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-29T20:26:52Z",
+  "title": "Design System: Tag Toolkit for Azure Boards",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Accent",
+        "canonical": "#0078d4",
+        "tonalRamp": [
+          "#000f36",
+          "#002868",
+          "#00449c",
+          "#0066c1",
+          "#2288e6",
+          "#58acff",
+          "#94d0ff",
+          "#cdf3ff"
+        ]
+      },
+      "accent-tint": {
+        "role": "secondary",
+        "displayName": "Accent Tint",
+        "canonical": "rgba(222, 236, 249, 1)",
+        "tonalRamp": [
+          "#0d1217",
+          "#242c34",
+          "#3e4954",
+          "#5c6873",
+          "#7b8894",
+          "#9da9b4",
+          "#c3ccd4",
+          "#e9eff5"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "rgba(255, 255, 255, 1)",
+        "tonalRamp": [
+          "#121212",
+          "#2b2b2b",
+          "#484848",
+          "#666666",
+          "#868686",
+          "#a8a8a8",
+          "#cacaca",
+          "#eeeeee"
+        ]
+      },
+      "divider": {
+        "role": "neutral",
+        "displayName": "Divider",
+        "canonical": "rgba(218, 218, 218, 1)",
+        "tonalRamp": [
+          "#121212",
+          "#2b2b2b",
+          "#484848",
+          "#666666",
+          "#868686",
+          "#a8a8a8",
+          "#cacaca",
+          "#eeeeee"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "canonical": "rgba(200, 200, 200, 1)",
+        "tonalRamp": [
+          "#121212",
+          "#2b2b2b",
+          "#484848",
+          "#666666",
+          "#868686",
+          "#a8a8a8",
+          "#cacaca",
+          "#eeeeee"
+        ]
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "Hover",
+        "canonical": "rgba(234, 234, 234, 1)",
+        "tonalRamp": [
+          "#121212",
+          "#2b2b2b",
+          "#484848",
+          "#666666",
+          "#868686",
+          "#a8a8a8",
+          "#cacaca",
+          "#eeeeee"
+        ]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Text Primary",
+        "canonical": "#1e1e1e",
+        "tonalRamp": [
+          "#121212",
+          "#2b2b2b",
+          "#484848",
+          "#666666",
+          "#868686",
+          "#a8a8a8",
+          "#cacaca",
+          "#eeeeee"
+        ]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Text",
+        "canonical": "rgba(0, 0, 0, 0.55)",
+        "tonalRamp": [
+          "#121212",
+          "#2b2b2b",
+          "#484848",
+          "#666666",
+          "#868686",
+          "#a8a8a8",
+          "#cacaca",
+          "#eeeeee"
+        ]
+      },
+      "error": {
+        "role": "error",
+        "displayName": "Error",
+        "canonical": "#c4314b",
+        "tonalRamp": [
+          "#300003",
+          "#5e0011",
+          "#900023",
+          "#b72241",
+          "#de4b5f",
+          "#fe7684",
+          "#ffa9b0",
+          "#ffdbdd"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "Body",
+        "purpose": "Working text: search, refresh bar, counts note, pagination, rename input."
+      },
+      "input": {
+        "displayName": "Input",
+        "purpose": "Merge-dialog target field only."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Refresh stats and rename validation errors."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase dialog section headings."
+      },
+      "badge": {
+        "displayName": "Badge",
+        "purpose": "The 'Create new' badge."
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "search-input",
+      "description": "Hand-built tag search with a clear button that appears once there is a value.",
+      "html": "<div class=\"ds-search\"><input class=\"ds-search-input\" type=\"search\" aria-label=\"Search tags\" placeholder=\"Search tags…\" value=\"front\" /><button class=\"ds-search-clear\" type=\"button\" aria-label=\"Clear search\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 12 12\" aria-hidden=\"true\"><path d=\"M2 2l8 8M10 2l-8 8\" stroke=\"currentColor\" stroke-width=\"1.2\" fill=\"none\"/></svg></button></div>",
+      "css": ".ds-search { position: relative; display: flex; align-items: center; width: 320px; max-width: 100%; } .ds-search-input { flex: 1; padding: 4px 28px 4px 8px; border: 1px solid var(--tm-border, rgba(200, 200, 200, 1)); border-radius: 2px; font-size: 13px; color: var(--text-primary-color, #1e1e1e); background: var(--tm-surface, rgba(255, 255, 255, 1)); } .ds-search-input:focus-visible { outline: 2px solid var(--communication-foreground, #0078d4); outline-offset: 1px; } .ds-search-clear { position: absolute; right: 4px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer; color: var(--tm-text-secondary, rgba(0, 0, 0, 0.55)); font-size: 16px; line-height: 1; padding: 0; }"
+    },
+    {
+      "name": "Tag Name (Rename Trigger)",
+      "kind": "custom",
+      "refersTo": "rename-input",
+      "description": "Tag name as a borderless button; a pencil appears on hover, and double-click, Enter, F2 or Space starts the inline rename.",
+      "html": "<button class=\"ds-tag-name\" type=\"button\" aria-label=\"Rename tag frontend\" title=\"frontend&#10;Double-click, Enter, or F2 to rename\">frontend<span class=\"ds-tag-name-pencil\" aria-hidden=\"true\"><svg class=\"ds-pencil\" width=\"12\" height=\"12\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.2\" aria-hidden=\"true\"><path d=\"M11 2.5l2.5 2.5L5.5 13H3v-2.5z\"/></svg></span></button>",
+      "css": ".ds-tag-name { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none; background: transparent; color: inherit; font: inherit; font-size: 13px; padding: 0; border-radius: 2px; } .ds-tag-name-pencil { display: none; font-size: 11px; color: var(--tm-text-secondary, rgba(0, 0, 0, 0.55)); } .ds-tag-name:hover .ds-tag-name-pencil, .ds-tag-name:focus-visible .ds-tag-name-pencil { display: inline; } .ds-tag-name:focus-visible { outline: 2px solid var(--communication-foreground, #0078d4); outline-offset: 2px; }"
+    },
+    {
+      "name": "Rename Input",
+      "kind": "input",
+      "refersTo": "rename-input",
+      "description": "Inline field that replaces the tag name while renaming. Enter commits, Esc or leaving abandons; a hint says so, and errors appear beneath and keep the draft.",
+      "html": "<div class=\"ds-rename\"><div class=\"ds-rename-row\"><input class=\"ds-rename-input\" type=\"text\" value=\"front-end\" aria-label=\"Edit tag name\" dir=\"auto\" /><span class=\"ds-rename-hint\">Press Enter to rename, Esc to cancel.</span></div><div class=\"ds-rename-error\" role=\"alert\">A tag with this name already exists — use Merge instead.</div></div>",
+      "css": ".ds-rename { width: 520px; max-width: 100%; } .ds-rename-input { width: 100%; box-sizing: border-box; padding: 2px 6px; font-size: 13px; border: 1px solid var(--tm-border, rgba(200, 200, 200, 1)); border-radius: 2px; background: var(--tm-surface, rgba(255, 255, 255, 1)); color: var(--text-primary-color, #1e1e1e); } .ds-rename-input:focus { outline: 2px solid var(--tm-focus, var(--focus-border-color, #0078d4)); outline-offset: -2px; } .ds-rename-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; } .ds-rename-hint { font-size: 12px; color: var(--tm-text-secondary, rgba(0, 0, 0, 0.55)); } .ds-rename-error { font-size: 12px; color: var(--tm-error, var(--status-error-foreground, #c4314b)); margin-top: 2px; }"
+    },
+    {
+      "name": "Merge Target Combobox",
+      "kind": "input",
+      "refersTo": "merge-target-input",
+      "description": "Hand-built combobox: target field and ranked suggestion list share a border, capped at 50 rows with a hint, plus a final row to create a new tag.",
+      "html": "<div class=\"ds-target\"><input class=\"ds-target-input\" type=\"text\" value=\"front\" placeholder=\"Type to search or create a tag\" autocomplete=\"off\" /><div class=\"ds-target-list\"><div class=\"ds-target-option ds-target-option-active\">frontend</div><div class=\"ds-target-option\">front-end</div><div class=\"ds-target-create\"><span class=\"ds-target-new\">front</span><span class=\"ds-create-badge\">Create new</span></div></div><div class=\"ds-target-hint\">Showing the first 50 of 312 matches. Keep typing to narrow the list.</div></div>",
+      "css": ".ds-target { width: 320px; max-width: 100%; } .ds-target-input { width: 100%; box-sizing: border-box; padding: 4px 8px; font-size: 14px; line-height: 20px; border: 1px solid var(--tm-border, rgba(200, 200, 200, 1)); border-radius: 2px 2px 0 0; border-bottom: none; background: var(--tm-surface, rgba(255, 255, 255, 1)); color: var(--text-primary-color, #1e1e1e); } .ds-target-input:focus { outline: 2px solid var(--tm-focus, var(--focus-border-color, #0078d4)); outline-offset: -2px; } .ds-target-list { border: 1px solid var(--tm-border, rgba(200, 200, 200, 1)); border-top: none; border-radius: 0 0 2px 2px; background: var(--tm-surface, rgba(255, 255, 255, 1)); max-height: 160px; overflow-y: auto; } .ds-target-option { padding: 6px 10px; cursor: pointer; font-size: 13px; color: var(--text-primary-color, #1e1e1e); } .ds-target-option:hover, .ds-target-option-active { background: var(--tm-hover, rgba(234, 234, 234, 1)); } .ds-target-create { padding: 6px 10px; cursor: pointer; border-top: 1px solid var(--tm-divider, rgba(218, 218, 218, 1)); display: flex; align-items: center; gap: 8px; } .ds-target-create:hover { background: var(--tm-hover, rgba(234, 234, 234, 1)); } .ds-target-new { color: var(--communication-foreground, #0078d4); font-weight: 600; font-size: 13px; } .ds-create-badge { font-size: 11px; color: var(--communication-foreground, #0078d4); background: var(--tm-accent-tint, rgba(222, 236, 249, 1)); border-radius: 10px; padding: 1px 7px; font-weight: 600; letter-spacing: 0.2px; } .ds-target-hint { padding: 6px 10px; border-top: 1px solid var(--tm-divider, rgba(218, 218, 218, 1)); font-size: 12px; color: var(--tm-text-secondary, rgba(0, 0, 0, 0.55)); }"
+    },
+    {
+      "name": "Create New Badge",
+      "kind": "chip",
+      "refersTo": "create-new-badge",
+      "description": "Accent capsule marking a typed name that does not match an existing tag.",
+      "html": "<span class=\"ds-badge\">Create new</span>",
+      "css": ".ds-badge { display: inline-block; font-size: 11px; color: var(--communication-foreground, #0078d4); background: var(--tm-accent-tint, rgba(222, 236, 249, 1)); border-radius: 10px; padding: 1px 7px; font-weight: 600; letter-spacing: 0.2px; }"
+    },
+    {
+      "name": "Dialog Section Label",
+      "kind": "custom",
+      "refersTo": "section-label",
+      "description": "Uppercase caption above the affected-tags list in the merge and delete dialogs.",
+      "html": "<div class=\"ds-section-label\">3 tags will be deleted</div>",
+      "css": ".ds-section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--tm-text-secondary, rgba(0, 0, 0, 0.55)); margin: 12px 0 8px; }"
+    },
+    {
+      "name": "Pill Count",
+      "kind": "chip",
+      "refersTo": "counts-note",
+      "description": "Work item count set off by a 1px left rule inside a dialog tag pill (host Pill approximated here with a plain outlined capsule).",
+      "html": "<span class=\"ds-pill\">frontend<span class=\"ds-pill-count\">128</span></span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; padding: 2px 10px; font-size: 13px; border: 1px solid var(--tm-border, rgba(200, 200, 200, 1)); border-radius: 12px; color: var(--text-primary-color, #1e1e1e); background: var(--tm-surface, rgba(255, 255, 255, 1)); } .ds-pill-count { margin-inline-start: 6px; padding-inline-start: 6px; border-inline-start: 1px solid currentColor; font-weight: 600; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Counts Note",
+      "kind": "custom",
+      "refersTo": "counts-note",
+      "description": "Explains what the numbers on tags mean and how old they are; sits above the dialog form.",
+      "html": "<p class=\"ds-counts-note\">The number on each tag is how many work items use it across the organization, counted 3 hours ago. If these tags were used recently, close this dialog and select Refresh counts first.</p>",
+      "css": ".ds-counts-note { margin: 0 0 16px; font-size: 13px; color: var(--tm-text-secondary, rgba(0, 0, 0, 0.55)); max-width: 480px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Guest",
+    "overview": "Tag Toolkit lives inside someone else's house. It is a hub in the Azure Boards navigation, rendered in the host's iframe, used by a scrum master who is mid-cleanup and wants to get back to the board. So the visual system does not have a voice of its own: type, theme colours, page chrome, tables, dialogs, buttons, pills and toasts all come from Azure DevOps's component library (`azure-devops-ui`) and its theme variables. The product adds only what Boards does not have, and it adds it in the host's accent: a thin token layer, a few hand-built fields, and a handful of small text styles.\n\nThe mood is precise and utilitarian. Controls are compact (13px text, 2px corners, 1px hairlines), numbers are aligned and exact, and every piece of metadata (when counts were taken, how the last refresh went) sits in quiet secondary text rather than competing with the tag list. Nothing is decorative; each element earns its place by helping someone decide which tags to rename, merge or delete.\n\nNo visual rejection beyond that is recorded. The Don'ts below come from what the incumbent code already does.",
+    "keyCharacteristics": [
+      "Host-first: the host's theme, font stack and components are the default; custom styling is the exception.",
+      "Compact and exact: small controls, 2px corners, hairline borders, right-aligned counts, tabular digits in dialog pills.",
+      "Flat inside, lifted by the host: depth comes only from the host's Card and Dialog.",
+      "Quiet metadata: ages, stats and notes are secondary text at 12–13px.",
+      "Destructive actions are carried by the host's danger button and warning card, never by custom styling."
+    ],
+    "rules": [
+      {
+        "name": "The Wrapped Triplet Rule",
+        "body": "ADO's --palette-* variables are bare RGB triplets, so they must be wrapped: rgba(var(--palette-neutral-20, 200, 200, 200), 1). var(--palette-neutral-20, #ccc) is an invalid declaration and the browser drops the whole property. Use the --tm-* tokens at the top of tag-manager.css, never the raw variables. --text-* and --callout-* variables are full colours and are used as is.",
+        "section": "colors"
+      },
+      {
+        "name": "The Borrowed Accent Rule",
+        "body": "The only accent is the host's blue, and it appears on small things: a focus outline, a badge, a new-tag label. Do not introduce a colour of our own.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Count Rule",
+        "body": "Counts are numbers people compare. Right-align them in the table and use tabular figures where they sit inside pills.",
+        "section": "typography"
+      },
+      {
+        "name": "The Quiet Metadata Rule",
+        "body": "Anything that explains a number (its age, how it was fetched) uses Secondary Text and never gets bolder than the number itself.",
+        "section": "typography"
+      },
+      {
+        "name": "The Fill-the-Card Rule",
+        "body": "A new wrapper inside the Card gets flex: 1 1 auto; min-width: 0. Without it the whole region narrows to its content.",
+        "section": "layout"
+      },
+      {
+        "name": "The Visible Focus Rule",
+        "body": "A hand-built control that sets outline: none must draw its own focus ring. The merge-target field shows a 2px inset ring in --tm-focus; it never relies on a border change.",
+        "section": "components"
+      },
+      {
+        "name": "The Explicit Commit Rule",
+        "body": "A change that rewrites work items across the organization is committed by an explicit act, Enter or a dialog button, never by focus leaving a field. Leaving the field abandons the edit.",
+        "section": "components"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Structure is a 1px Divider or Border line and, for state, a tonal fill. Do not add custom shadows; the host supplies depth where depth belongs.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take colours from the `--tm-*` tokens (including `--tm-text-primary` and `--tm-accent`), which wrap the host theme variables in `rgba(var(--palette-…, r, g, b), 1)` with ADO's defaults as fallbacks.",
+      "Do reach for an `azure-devops-ui` component first; hand-build only what the host lacks, and match the host's scale (13px text, 2px corners, 1px hairlines).",
+      "Do show every count with its age (Last updated, counts note) so a 0 reads as \"0 when last counted\".",
+      "Do right-align counts and use tabular figures where counts sit inside a pill.",
+      "Do give any wrapper inside the Card `flex: 1 1 auto; min-width: 0`.",
+      "Do make a change that rewrites work items an explicit act (Enter, or a button in a dialog), never a side effect of focus leaving a field.",
+      "Do keep destructive confirmation in the host `Dialog` with a `primary` + `danger` button, with `enterPrimary` off so no keystroke while choosing can confirm it.",
+      "Do render a tag as a `TagPill` so a long name ellipsizes, its count stays visible, and it stays out of the dialog's focus zone.",
+      "Do cap long lists and say how many are hidden; a thousand rendered rows makes every keystroke lag.",
+      "Do check changes to host-component styling in the real library in a browser; jest mocks do not reproduce its behaviour."
+    ],
+    "donts": [
+      "Don't use a raw `--palette-*` variable as a colour, or as `var(--palette-x, #ccc)`; it is a bare RGB triplet and the declaration is dropped.",
+      "Don't add shadows to anything inside the Card; the host provides depth.",
+      "Don't introduce a colour, typeface or illustration style of our own.",
+      "Don't hard-code a hex colour where a `--tm-*` token already exists; focus and error colours are `--tm-focus` and `--tm-error`.",
+      "Don't set `outline: none` on a hand-built control without drawing a focus ring in its place.",
+      "Don't let a flex wrapper size to its content inside the Card.",
+      "Don't rely on a tag count being current; never present it without its age."
+    ]
+  }
+}
