@@ -144,8 +144,22 @@ describe("TagManagerApp — merge feedback", () => {
     await openMergeInto("alpha");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Merged 1 tag into “alpha”. 5 work items re-tagged. Refresh counts to update the numbers."
+      "Merged 1 tag into “alpha”. Added “alpha” to 5 work items. Refresh counts to update the numbers."
     );
+  });
+
+  it("does not claim zero work items were re-tagged when the target was already on all of them", async () => {
+    mockTagService.mergeTags.mockResolvedValue({
+      succeeded: [{ source: tag("2", "beta"), affectedCount: 0, workItemIds: [] }],
+      failed: [],
+    });
+    await renderAndSelect(["alpha", "beta"]);
+
+    await openMergeInto("alpha");
+
+    const toast = await screen.findByRole("alert");
+    expect(toast).toHaveTextContent("Merged 1 tag into “alpha”.");
+    expect(toast).not.toHaveTextContent("re-tagged");
   });
 
   it("keeps the table on screen while it reloads after a merge", async () => {
@@ -185,6 +199,70 @@ describe("TagManagerApp — merge feedback", () => {
     expect(screen.getByText(/Couldn't merge 1 tag/)).toBeInTheDocument();
   });
 
+  it("keeps tags selected during the reload after a merge, dropping only ones that are gone", async () => {
+    mockTagService.getAllTags.mockResolvedValue([tag("1", "alpha"), tag("2", "beta"), tag("3", "gamma")]);
+    mockTagService.mergeTags.mockResolvedValue({
+      succeeded: [{ source: tag("2", "beta"), affectedCount: 1, workItemIds: [1] }],
+      failed: [],
+    });
+    await renderAndSelect(["beta"]);
+    const reload = deferred<ReturnType<typeof tag>[]>();
+    mockTagService.getAllTags.mockReturnValueOnce(reload.promise);
+
+    await openMergeInto("alpha");
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select gamma" }));
+    reload.resolve([tag("1", "alpha"), tag("3", "gamma")]);
+
+    await waitFor(() => expect(mockTagService.getAllTags).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByTestId("selection-status")).toHaveTextContent("1 tag selected")
+    );
+    expect(screen.getByRole("checkbox", { name: "Select gamma" })).toBeChecked();
+  });
+
+  it("keeps later selections alongside failed sources after a partial merge", async () => {
+    mockTagService.getAllTags.mockResolvedValue([tag("1", "alpha"), tag("2", "beta"), tag("3", "gamma")]);
+    mockTagService.mergeTags.mockResolvedValue({
+      succeeded: [],
+      failed: [{ source: tag("2", "beta"), error: "Rate limited" }],
+    });
+    await renderAndSelect(["beta"]);
+    const reload = deferred<ReturnType<typeof tag>[]>();
+    mockTagService.getAllTags.mockReturnValueOnce(reload.promise);
+
+    await openMergeInto("alpha");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select gamma" }));
+    reload.resolve([tag("1", "alpha"), tag("2", "beta"), tag("3", "gamma")]);
+
+    await screen.findByText(/Couldn't merge 1 tag/);
+    expect(screen.getByTestId("selection-status")).toHaveTextContent("2 tags selected");
+  });
+
+  it("does not close a dialog the user opened while the post-merge reload was pending", async () => {
+    mockTagService.getAllTags.mockResolvedValue([tag("1", "alpha"), tag("2", "beta"), tag("3", "gamma")]);
+    mockTagService.mergeTags.mockResolvedValue({
+      succeeded: [{ source: tag("2", "beta"), affectedCount: 1, workItemIds: [1] }],
+      failed: [],
+    });
+    await renderAndSelect(["beta"]);
+    const reload = deferred<ReturnType<typeof tag>[]>();
+    mockTagService.getAllTags.mockReturnValueOnce(reload.promise);
+
+    await openMergeInto("alpha");
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select gamma" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete/ }));
+    await screen.findByRole("dialog");
+
+    reload.resolve([tag("1", "alpha"), tag("3", "gamma")]);
+    await waitFor(() => expect(mockTagService.getAllTags).toHaveBeenCalledTimes(2));
+    await screen.findByRole("checkbox", { name: "Select gamma" });
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   it("closes the dialog and shows an error when the merge request itself throws", async () => {
     mockTagService.mergeTags.mockRejectedValue(new Error("Network down"));
     await renderAndSelect(["alpha", "beta"]);
@@ -193,5 +271,36 @@ describe("TagManagerApp — merge feedback", () => {
 
     expect(await screen.findByText("Network down")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("TagManagerApp — dialog counts timestamp", () => {
+  beforeEach(() => {
+    Object.values(mockTagService).forEach((fn) => fn.mockReset());
+    Object.values(mockTagCountCacheService).forEach((fn) => fn.mockReset());
+    mockTagCountCacheService.shouldAutoRefresh.mockResolvedValue(false);
+    mockTagService.getAllTags.mockResolvedValue([tag("1", "alpha")]);
+  });
+
+  it("keeps the counts age the dialog opened with when a refresh finishes behind it", async () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    mockTagCountCacheService.getCache.mockResolvedValue({
+      counts: { alpha: 7 },
+      lastUpdated: twoHoursAgo,
+    });
+    mockTagCountCacheService.refreshCache.mockResolvedValue({
+      counts: { alpha: 0 },
+      lastUpdated: new Date().toISOString(),
+    });
+    await renderAndSelect(["alpha"]);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Delete/ }));
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "Refresh counts" }));
+    await waitFor(() => expect(mockTagCountCacheService.refreshCache).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh counts" })).toBeEnabled());
+
+    expect(screen.getByTestId("tag-count-alpha")).toHaveTextContent("7");
+    expect(screen.getByTestId("counts-note")).toHaveTextContent("counted 2 hours ago");
   });
 });

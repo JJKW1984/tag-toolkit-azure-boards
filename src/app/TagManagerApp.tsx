@@ -25,9 +25,10 @@ import { SortState, sortTags } from "../utils/sortTags";
 /** Work in flight behind an open dialog; `done`/`total` are set when progress is countable. */
 type BusyState = { kind: "delete" | "merge"; done?: number; total?: number } | null;
 
+/** `countsUpdatedAt` is snapshotted with the tags so a later refresh can't relabel their counts as fresh. */
 type DialogState =
-  | { type: "delete"; tags: TagItem[] }
-  | { type: "merge"; sources: TagItem[] }
+  | { type: "delete"; tags: TagItem[]; countsUpdatedAt: string | null }
+  | { type: "merge"; sources: TagItem[]; countsUpdatedAt: string | null }
   | null;
 
 const tagService = new TagService();
@@ -184,7 +185,12 @@ export const TagManagerApp: React.FC = () => {
         setLastUpdated(cache.lastUpdated);
         setLastStats(cache.stats ?? null);
       }
-      setSelectedIds(new Set());
+      // A silent reload leaves the user working, so keep what they selected and drop only what is gone.
+      setSelectedIds((prev) => {
+        if (!options?.silent) return new Set();
+        const present = new Set(tagsWithCounts.map((t) => t.id));
+        return new Set([...prev].filter((id) => present.has(id)));
+      });
       // Not awaited: the cooldown lookup is one more storage read the table need not wait on.
       void tagCountCacheService
         .shouldAutoRefresh(cache)
@@ -241,12 +247,12 @@ export const TagManagerApp: React.FC = () => {
 
   const handleDeleteClick = () => {
     const selected = tags.filter((t) => selectedIds.has(t.id));
-    setDialog({ type: "delete", tags: selected });
+    setDialog({ type: "delete", tags: selected, countsUpdatedAt: lastUpdated });
   };
 
   const handleMergeClick = () => {
     const selected = tags.filter((t) => selectedIds.has(t.id));
-    setDialog({ type: "merge", sources: selected });
+    setDialog({ type: "merge", sources: selected, countsUpdatedAt: lastUpdated });
   };
 
   // --- Background jobs ---
@@ -286,7 +292,8 @@ export const TagManagerApp: React.FC = () => {
     }
   };
 
-  const runMergeJobs = async (sources: TagItem[], targetName: string) => {
+  const runMergeJobs = async (selectedSources: TagItem[], targetName: string) => {
+    const sources = selectedSources.filter((s) => s.name.toLowerCase() !== targetName.toLowerCase());
     setBusy({ kind: "merge" });
     try {
       const { succeeded, failed } = await tagService.mergeTags(sources, targetName);
@@ -296,35 +303,37 @@ export const TagManagerApp: React.FC = () => {
       setTags((prev) => prev.filter((t) => !removedIds.has(t.id)));
 
       if (succeeded.length > 0) {
-        const retagged = succeeded.reduce((sum, s) => sum + s.affectedCount, 0);
+        // affectedCount only covers items that gained the target; items that already had it also lose the source.
+        const added = succeeded.reduce((sum, s) => sum + s.affectedCount, 0);
+        const addedNote = added > 0 ? ` Added “${targetName}” to ${plural(added, "work item")}.` : "";
         setToast({
-          message: `Merged ${plural(succeeded.length, "tag")} into “${targetName}”. ${plural(
-            retagged,
-            "work item"
-          )} re-tagged. Refresh counts to update the numbers.`,
+          message: `Merged ${plural(succeeded.length, "tag")} into “${targetName}”.${addedNote} Refresh counts to update the numbers.`,
         });
       }
 
-      // The merge itself is done; free the user from the dialog before the reload.
+      // The merge is done: deselect everything it handled except the sources that failed, which stay for a retry.
+      const failedIds = new Set(failed.map((f) => f.source.id));
+      const handledIds = new Set(selectedSources.map((s) => s.id).filter((id) => !failedIds.has(id)));
+      setSelectedIds((prev) => new Set([...prev].filter((id) => !handledIds.has(id))));
+
+      // Free the user from the dialog before the reload. From here the dialog and busy state may belong
+      // to something newer, so only the error path below clears them.
       setBusy(null);
       setDialog(null);
 
       // Reload behind the table to pick up the new target tag if it was created.
-      await loadTags({ silent: true }); // resets selectedIds to empty
+      await loadTags({ silent: true });
 
       if (failed.length > 0) {
         const reasons = failed.map((f) => `${f.source.name} (${f.error})`).join("; ");
         setError(
           `Couldn't merge ${plural(failed.length, "tag")} into “${targetName}”: ${reasons}. They're still selected so you can try again.`
         );
-        // Re-select any sources that failed to merge so the user can retry.
-        setSelectedIds(new Set(failed.map((f) => f.source.id)));
       }
     } catch (e) {
-      setError(sanitizeError(e));
-    } finally {
       setBusy(null);
       setDialog(null);
+      setError(sanitizeError(e));
     }
   };
 
@@ -492,7 +501,7 @@ export const TagManagerApp: React.FC = () => {
       {dialog?.type === "delete" && (
         <DeleteDialog
           tags={dialog.tags}
-          countsUpdatedAt={lastUpdated}
+          countsUpdatedAt={dialog.countsUpdatedAt}
           busyLabel={
             busy?.kind === "delete" ? `Deleting ${busy.done ?? 0} of ${busy.total ?? 0}…` : null
           }
@@ -504,15 +513,10 @@ export const TagManagerApp: React.FC = () => {
         <MergeDialog
           sources={dialog.sources}
           allTags={tags}
-          countsUpdatedAt={lastUpdated}
+          countsUpdatedAt={dialog.countsUpdatedAt}
           busyLabel={busy?.kind === "merge" ? "Merging…" : null}
           onConfirm={(targetName) =>
-            runMergeJobs(
-              dialog.sources.filter(
-                (s) => s.name.toLowerCase() !== targetName.toLowerCase()
-              ),
-              targetName
-            )
+            runMergeJobs(dialog.sources, targetName)
           }
           onCancel={() => setDialog(null)}
         />

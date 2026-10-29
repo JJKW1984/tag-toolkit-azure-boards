@@ -72,6 +72,20 @@ After only: [sorted by count](assets/2026-10-28-ui-review/after-sorted.png),
 Final state: `tsc` clean, 40 suites and 433 tests pass, `pnpm build` compiles, detector reports nothing,
 and a scripted run in light and an emulated dark theme logs no console errors.
 
+## Follow-up from a second review
+
+A Copilot review of the branch raised four points. Each was checked against the code and was correct.
+
+| Finding | Fix |
+| --- | --- |
+| The merge toast said "N work items re-tagged", but `applyTagUpdate` counts only items that gained the target. Items already carrying it are skipped even though the source is still removed, so a successful merge could say "0 re-tagged". This corrects the earlier note here that the toast over-counted: items with several source tags are counted once, so the real error was an undercount. | The toast now says "Added “target” to N work items." and omits that sentence when N is 0. |
+| The silent reload after a merge cleared `selectedIds` when it finished, and the failure branch then replaced the selection with only the failed sources. Tags selected while the reload was pending were lost. | A silent reload keeps the selection and drops only IDs that no longer exist. The merge deselects the sources it handled except the failed ones, which stay selected for a retry. |
+| `runMergeJobs` closed its dialog before the reload, then cleared the dialog and busy state again in `finally`. A dialog or operation started during the reload was closed when it finished. | The `finally` is gone. Only the error path clears the dialog and busy state. |
+| `DeleteDialog` and `MergeDialog` showed the live `lastUpdated` beside a frozen snapshot of the tags. A refresh finishing while a dialog was open labelled old counts as freshly counted. | `DialogState` holds `countsUpdatedAt`, taken when the dialog opens. |
+
+Each has a test in `TagManagerApp.actions.test.tsx` that failed before the fix. 41 suites and 439 tests
+pass.
+
 ## Library behaviour worth knowing
 
 The jest setup maps every `azure-devops-ui/*` import to one mock, so green unit tests do not prove how
@@ -141,6 +155,6 @@ Ordered roughly by value. None were in scope for this round (P0/P1, then the emp
 - A tag missing from a loaded count cache shows 0 (`?? 0` in `TagManagerApp.tsx`), so "—" and the
   unknown-counts-last sort rule only apply before the first cache loads. Decide whether a tag created after
   the last refresh should show "—".
-- Merge's toast sums affected work items per source tag, so an item carrying several source tags is counted
-  more than once.
+- Merge's toast reports only work items that gained the target tag. It still cannot say how many work items
+  lost a source tag, because deleting a source is cascaded by ADO and never counted.
 - Pagination was kept (25 per page); revisit if large tag sets make it awkward now that sorting exists.
