@@ -30,12 +30,13 @@ describe("mergeTags ability", () => {
     expect(result).toMatchObject({ name: "Merge tags (3->1)", status: "pass" });
   });
 
-  it("removes every source tag from the project", async () => {
+  it("keeps source tags in the project catalog after replacing them on work items", async () => {
     const client = new FakeAdoClient();
     await mergeTagsAbility.run(contextFor(client));
 
     for (const source of SOURCES) {
-      expect(client.tagNames()).not.toContain(source);
+      expect(client.tagNames()).toContain(source);
+      expect(await client.countWorkItemsWithTag(source)).toBe(0);
     }
     expect(client.tagNames()).toContain(TARGET);
   });
@@ -57,15 +58,16 @@ describe("mergeTags ability", () => {
     }
   });
 
-  it("fails when a source tag survives the merge", async () => {
+  it("fails when a source remains on a processed work item", async () => {
     const client = new FakeAdoClient();
-    jest.spyOn(client, "deleteTag").mockResolvedValue(undefined);
+    const setTags = client.setWorkItemTags.bind(client);
+    jest.spyOn(client, "setWorkItemTags").mockImplementation(async (id, tags) => {
+      await setTags(id, [...tags, SOURCES[0]]);
+    });
 
     const result = await runWithPollSettings(contextFor(client), FAST_POLL_FOR_TESTS);
 
     expect(result.status).toBe("fail");
-    // With delete stubbed out the work items still carry the source, which the
-    // ability reports before it reaches the tag-list check.
     expect(result.detail).toMatch(/still carries/);
   });
 

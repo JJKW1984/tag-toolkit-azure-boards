@@ -4,7 +4,7 @@ import { testTag } from "../../naming";
 test("merges two selected tags into a target tag", async ({ page, seed }) => {
   await openHub(page);
   // Scoped to this run: the checkboxes below are picked by position, so a
-  // leftover run's merge tags in the result would be selected and destroyed.
+  // leftover run's merge tags in the result would also be selected and changed.
   const mergeQuery = testTag(seed.runId, "ui", "merge-");
   await searchFor(page, mergeQuery);
 
@@ -20,7 +20,7 @@ test("merges two selected tags into a target tag", async ({ page, seed }) => {
   const dialog = page.locator('[data-testid="merge-dialog"]');
   await expect(dialog).toBeVisible();
 
-  await dialog.getByRole("textbox").first().fill(seed.merge.target);
+  await dialog.getByRole("combobox", { name: "Tag to keep" }).fill(seed.merge.target);
   await page.getByRole("button", { name: /^Merge/ }).last().click();
 
   await expect(dialog).toBeHidden({ timeout: 60_000 });
@@ -28,7 +28,7 @@ test("merges two selected tags into a target tag", async ({ page, seed }) => {
   await searchFor(page, mergeQuery);
   await expect(rowFor(page, seed.merge.target)).toBeVisible({ timeout: 30_000 });
   for (const source of seed.merge.sources) {
-    await expect(rowFor(page, source)).toHaveCount(0);
+    await expect(rowFor(page, source)).toBeVisible();
   }
 });
 

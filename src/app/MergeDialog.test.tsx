@@ -88,7 +88,7 @@ describe("MergeDialog", () => {
       renderDialog();
 
       expect(warning()).toHaveTextContent(
-        "Choose the tag to keep: click one of the tags below, or name a different one. Every other selected tag is deleted, and work items that use them are re-tagged with the tag you keep."
+        "Choose the tag to keep: click one of the tags below, or name a different one. On matching work items, every other selected tag is replaced with the tag you keep."
       );
       expect(warning()).not.toHaveTextContent("will be merged into the target");
     });
@@ -104,7 +104,7 @@ describe("MergeDialog", () => {
       );
 
       expect(warning()).toHaveTextContent(
-        "Choose the tag to keep. The selected tag is deleted, and work items that use it are re-tagged with the tag you keep."
+        "Choose the tag to keep. On matching work items, the selected tag is replaced with the tag you keep."
       );
       expect(warning()).not.toHaveTextContent(/every other/i);
       expect(warning()).not.toHaveTextContent(/click one of the tags/i);
@@ -115,7 +115,7 @@ describe("MergeDialog", () => {
       fireEvent.change(target(), { target: { value: "one" } });
 
       expect(warning()).toHaveTextContent(
-        "“one” is kept. The other tag is deleted, and work items that use it are re-tagged with “one”."
+        "“one” is kept. On matching work items, the other tag is replaced with “one”."
       );
     });
 
@@ -124,7 +124,7 @@ describe("MergeDialog", () => {
       fireEvent.change(target(), { target: { value: "keeper" } });
 
       expect(warning()).toHaveTextContent(
-        "The 2 selected tags are deleted, and work items that use them are re-tagged with “keeper”."
+        "On matching work items, the 2 selected tags are replaced with “keeper”."
       );
     });
 
@@ -132,7 +132,7 @@ describe("MergeDialog", () => {
       renderDialog();
       fireEvent.change(target(), { target: { value: "fresh" } });
 
-      expect(warning()).toHaveTextContent("“fresh” will be created");
+      expect(warning()).toHaveTextContent("“fresh” will be created when a work item needs it.");
     });
   });
 

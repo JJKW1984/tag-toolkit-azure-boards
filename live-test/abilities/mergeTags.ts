@@ -31,7 +31,7 @@ async function run(
     // anything else aborts before the first write.
     const owned = new Set(ids);
 
-    // Phase 1 — read and validate every source first, nothing written yet.
+    // Read and validate every source first, nothing written yet.
     const pendingUpdates = new Map<number, string[]>();
     for (const source of sources) {
       const candidates = await ctx.client.queryWorkItemIdsByTag(source);
@@ -49,8 +49,8 @@ async function run(
       );
       for (const item of current) {
         if (!item.tags.includes(source)) continue; // WIQL CONTAINS is substring-ish
-        if (item.tags.includes(target)) continue;
-        pendingUpdates.set(item.id, [...item.tags, target]);
+        const remaining = item.tags.filter((tag) => !sources.includes(tag));
+        pendingUpdates.set(item.id, remaining.includes(target) ? remaining : [...remaining, target]);
       }
     }
 
@@ -58,18 +58,6 @@ async function run(
       await ctx.client.setWorkItemTags(id, tags);
     }
 
-    // Phase 2 — delete sources; ADO cascades each off its work items.
-    const listed = await ctx.client.listTags();
-    for (const source of sources) {
-      const tag = listed.find((t) => t.name === source);
-      if (!tag) {
-        return { ok: false, detail: `${source} disappeared before it could be deleted` };
-      }
-      await ctx.client.deleteTag(tag.id);
-    }
-
-    // Same asynchrony deleteTag polls for: the cascade off each work item is
-    // not guaranteed to have landed by the time the DELETE returns.
     const settled = await pollUntil({
       probe: async () => await ctx.client.getWorkItemTags(ids),
       until: (items) =>
@@ -101,20 +89,7 @@ async function run(
       }
     }
 
-    const delisted = await pollUntil({
-      probe: async () => (await ctx.client.listTags()).map((t) => t.name),
-      until: (names) => !sources.some((s) => names.includes(s)) && names.includes(target),
-      ...poll,
-    });
-
-    const finalTags = delisted.last;
-    const survivor = sources.find((s) => finalTags.includes(s));
-    if (survivor) {
-      return {
-        ok: false,
-        detail: `${survivor} is still present in the tags list after ${delisted.elapsedMs}ms`,
-      };
-    }
+    const finalTags = (await ctx.client.listTags()).map((tag) => tag.name);
     if (!finalTags.includes(target)) {
       return { ok: false, detail: `${target} is missing from the tags list` };
     }
