@@ -120,9 +120,15 @@ describe("TagService", () => {
     expect(mockWorkItemTrackingClient.updateWorkItem).toHaveBeenCalledTimes(2);
 
     const patchOps = mockWorkItemTrackingClient.updateWorkItem.mock.calls[0][0] as Array<{
+      op: string;
       path: string;
       value: string | number;
     }>;
+    expect(patchOps).toContainEqual({
+      op: "replace",
+      path: "/fields/System.Tags",
+      value: "Alpha; New",
+    });
     const tagValue = String(patchOps.find((op) => op.path === "/fields/System.Tags")?.value).toLowerCase();
     expect(tagValue).not.toContain("old");
     expect(tagValue).toContain("alpha");
