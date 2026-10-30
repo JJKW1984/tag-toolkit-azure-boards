@@ -144,7 +144,7 @@ describe("TagManagerApp — merge feedback", () => {
     await openMergeInto("alpha");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Merged 1 tag into “alpha”. Added “alpha” to 5 work items. Refresh counts to update the numbers."
+      "Merged 1 tag into “alpha”. Updated 5 work items. Source tags remain in the project catalog. Refresh counts to update the numbers."
     );
   });
 
@@ -160,6 +160,39 @@ describe("TagManagerApp — merge feedback", () => {
     const toast = await screen.findByRole("alert");
     expect(toast).toHaveTextContent("Merged 1 tag into “alpha”.");
     expect(toast).not.toHaveTextContent("re-tagged");
+  });
+
+  it("keeps successfully merged source tags visible in the project catalog", async () => {
+    mockTagService.mergeTags.mockResolvedValue({
+      succeeded: [{ source: tag("2", "beta"), affectedCount: 1, workItemIds: [1] }],
+      failed: [],
+    });
+    await renderAndSelect(["beta"]);
+    const reload = deferred<ReturnType<typeof tag>[]>();
+    mockTagService.getAllTags.mockReturnValueOnce(reload.promise);
+
+    await openMergeInto("alpha");
+    await screen.findByRole("alert");
+
+    expect(screen.getByText("beta")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Source tags remain in the project catalog");
+    reload.resolve([tag("1", "alpha"), tag("2", "beta")]);
+    await waitFor(() => expect(mockTagService.getAllTags).toHaveBeenCalledTimes(2));
+  });
+
+  it("counts a work item updated for several sources only once", async () => {
+    mockTagService.mergeTags.mockResolvedValue({
+      succeeded: [
+        { source: tag("1", "alpha"), affectedCount: 1, workItemIds: [1] },
+        { source: tag("2", "beta"), affectedCount: 1, workItemIds: [1] },
+      ],
+      failed: [],
+    });
+    await renderAndSelect(["alpha", "beta"]);
+
+    await openMergeInto("target");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Updated 1 work item.");
   });
 
   it("keeps the table on screen while it reloads after a merge", async () => {

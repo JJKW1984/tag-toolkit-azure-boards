@@ -3,7 +3,7 @@ import * as SDK from "azure-devops-extension-sdk";
 import { getClient } from "azure-devops-extension-api";
 import { WorkItemTrackingRestClient } from "azure-devops-extension-api/WorkItemTracking";
 import { CommonServiceIds, IProjectPageService } from "azure-devops-extension-api/Common/CommonServices";
-import { WorkItemBatchGetRequest } from "azure-devops-extension-api/WorkItemTracking";
+import { WorkItem, WorkItemBatchGetRequest } from "azure-devops-extension-api/WorkItemTracking";
 import { sanitizeError } from "../utils/sanitizeError";
 import { joinTags, parseTags } from "../utils/tagString";
 import {
@@ -116,44 +116,32 @@ export class TagService {
   }
 
   /**
-   * Merges one or more source tags into targetName, atomically:
-   * Phase 1 (additive) — add targetName to every affected work item across ALL
-   *   sources; nothing is removed.
-   * Phase 2 (destructive) — delete only the source tags whose additions all
-   *   succeeded. ADO cascades each delete to strip that source tag everywhere.
-   * Sources that hit any failure are returned in `failed` (not deleted) for retry.
+   * Replaces source tags with targetName on the work items found for each source.
+   * Each item is revision-checked; the project tag catalog is never deleted from,
+   * so items acquiring a source after enumeration retain it for a later merge.
+   * A source can be partially processed on failure and safely retried.
    */
   async mergeTags(
     sources: TagItem[],
     targetName: string
   ): Promise<BatchMergeResult> {
-    const addTarget = (tags: string[]): string[] =>
-      tags.some((t) => t.toLowerCase() === targetName.toLowerCase())
-        ? tags
-        : [...tags, targetName];
-
     const succeeded: MergeSourceResult[] = [];
     const failed: MergeSourceFailure[] = [];
 
-    // Phase 1 — additive across the whole batch (no deletes yet).
     for (const source of sources) {
+      if (source.name.toLowerCase() === targetName.toLowerCase()) continue;
       try {
         const ids = await this.getWorkItemsWithTag(source.name);
-        const result = await this.applyTagUpdate(ids, addTarget);
+        const result = await this.applyTagUpdate(ids, (tags) => {
+          if (!tags.some((tag) => tag.toLowerCase() === source.name.toLowerCase())) return tags;
+          const remaining = tags.filter((tag) => tag.toLowerCase() !== source.name.toLowerCase());
+          return remaining.some((tag) => tag.toLowerCase() === targetName.toLowerCase())
+            ? remaining
+            : [...remaining, targetName];
+        });
         succeeded.push({ source, ...result });
       } catch (e) {
         failed.push({ source, error: sanitizeError(e) });
-      }
-    }
-
-    // Phase 2 — delete only sources whose additions fully succeeded.
-    for (const entry of [...succeeded]) {
-      try {
-        await this.deleteTagById(entry.source.id);
-      } catch (e) {
-        // Additions done but delete failed: treat as failed (retry is idempotent).
-        succeeded.splice(succeeded.indexOf(entry), 1);
-        failed.push({ source: entry.source, error: sanitizeError(e) });
       }
     }
 
@@ -191,7 +179,7 @@ export class TagService {
     const client = getClient(WorkItemTrackingRestClient);
     const affectedIds: number[] = [];
 
-    const workItemMap = new Map<number, string>();
+    const workItemMap = new Map<number, WorkItem>();
     for (let i = 0; i < workItemIds.length; i += 200) {
       const batch = workItemIds.slice(i, i + 200);
       const workItems = await client.getWorkItemsBatch(
@@ -199,23 +187,46 @@ export class TagService {
         project
       );
       for (const wi of workItems) {
-        workItemMap.set(wi.id, (wi.fields?.["System.Tags"] as string) ?? "");
+        workItemMap.set(wi.id, wi);
       }
     }
 
-    for (const [id, rawTags] of workItemMap.entries()) {
-      const original = parseTags(rawTags);
-      const updated = transform(original);
-      const normalizedOriginal = [...new Set(original)].sort().join(";");
-      const normalizedUpdated = [...new Set(updated)].sort().join(";");
-      if (normalizedOriginal === normalizedUpdated) continue;
+    for (const id of workItemIds) {
+      let item = workItemMap.get(id);
+      for (let retries = 0; ; retries++) {
+        if (!item) throw new Error(`Couldn't read work item ${id}; its tags were not updated.`);
+        if (!Number.isInteger(item.rev) || item.rev < 1) {
+          throw new Error(`Work item ${id} has no valid revision; its tags were not updated.`);
+        }
+        const original = parseTags((item.fields?.["System.Tags"] as string) ?? "");
+        const updated = transform(original);
+        const normalizedOriginal = [...new Set(original)].sort().join(";");
+        const normalizedUpdated = [...new Set(updated)].sort().join(";");
+        if (normalizedOriginal === normalizedUpdated) break;
 
-      await client.updateWorkItem(
-        [{ op: "add", path: "/fields/System.Tags", value: joinTags([...new Set(updated)]) }],
-        id,
-        project
-      );
-      affectedIds.push(id);
+        try {
+          await client.updateWorkItem(
+            [
+              { op: "test", path: "/rev", value: item.rev },
+              { op: "add", path: "/fields/System.Tags", value: joinTags([...new Set(updated)]) },
+            ],
+            id,
+            project
+          );
+          affectedIds.push(id);
+          break;
+        } catch (e) {
+          if (retries >= 3) throw e;
+          const current = await client.getWorkItemsBatch(
+            { ids: [id], fields: ["System.Tags"] } as WorkItemBatchGetRequest,
+            project
+          );
+          const latest = current.find((wi) => wi.id === id);
+          // A changed revision confirms a concurrent edit without depending on localized API errors.
+          if (!latest || latest.rev === item.rev) throw e;
+          item = latest;
+        }
+      }
     }
 
     return { affectedCount: affectedIds.length, workItemIds: affectedIds };

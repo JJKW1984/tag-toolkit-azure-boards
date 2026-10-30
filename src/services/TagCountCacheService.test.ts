@@ -50,6 +50,16 @@ describe("TagCountCacheService", () => {
     expect(result).toEqual(stored);
   });
 
+  it("invalidates corrupted counts written by the old prototype-key accumulator", async () => {
+    mockExtensionDataManager.getValue.mockResolvedValue({
+      counts: JSON.parse('{"constructor":"function Object() { [native code] }3"}'),
+      lastUpdated: new Date().toISOString(),
+    });
+
+    expect(await new TagCountCacheService().getCache()).toBeNull();
+    expect(loggedText(consoleSpies.warn)).toMatch(/invalid.*cache/i);
+  });
+
   it("reads with key 'orgTagCounts' and Default scope", async () => {
     mockExtensionDataManager.getValue.mockResolvedValue(undefined);
 
@@ -91,6 +101,32 @@ describe("TagCountCacheService", () => {
   // Makes the first request (the aggregation) get rejected, as Analytics does
   // for an unsupported $apply, so the crawl fallback runs for the rest.
   const rejectAggregate = () => fetchMock.mockResolvedValueOnce(failure(400, "bad $apply"));
+
+  it.each(["aggregate", "crawl"])("counts prototype-property tag names with %s and survives JSON storage", async (strategy) => {
+    if (strategy === "aggregate") {
+      fetchMock.mockResolvedValue(okJson({ value: [
+        { TagNames: "constructor; __proto__; toString", Count: 2 },
+        { TagNames: "constructor", Count: 1 },
+      ] }));
+    } else {
+      rejectAggregate();
+      fetchMock.mockResolvedValueOnce(okJson({ value: [
+        { Tags: [{ TagName: "constructor" }, { TagName: "__proto__" }, { TagName: "toString" }] },
+        { Tags: [{ TagName: "constructor" }, { TagName: "__proto__" }, { TagName: "toString" }] },
+        { Tags: [{ TagName: "constructor" }] },
+      ] }));
+    }
+
+    const counts = await new TagCountCacheService().fetchCounts("my-org");
+    const stored = JSON.parse(JSON.stringify(counts));
+
+    expect(counts["constructor"]).toBe(3);
+    expect(counts["__proto__"]).toBe(2);
+    expect(counts["tostring"]).toBe(2);
+    expect(stored["constructor"]).toBe(3);
+    expect(stored["__proto__"]).toBe(2);
+    expect(stored["tostring"]).toBe(2);
+  });
 
   const makeService = () => {
     const sleep = jest.fn().mockResolvedValue(undefined);

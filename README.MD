@@ -126,9 +126,12 @@ When shipping updates, always bump `version`.
 Tag operations are implemented through the Work Item Tracking APIs by updating the `System.Tags` field on affected work items.
 
 - Merge and delete show confirmation dialogs before changes are applied.
-- Merge adds the target before removing each source; failed sources remain available for retry.
+- Merge replaces each source with the target on matching work items using a single revision-checked update per item. It does not delete source tags from the project catalog or touch items that acquire the source after enumeration; run merge again to process those items.
+- Merges are not batch transactions: a failed source may have some work items updated already. Failures are reported and remain selected for a safe retry. Use the separate Delete action only when you intend project-wide tag removal.
+- Merge work-item updates check the revision and retry concurrent edits up to three times, preserving unrelated tag changes. Persistent conflicts are reported as failures.
 - Tag names are validated and duplicate rename targets are rejected in the UI.
 - Tag counts are stored with `IExtensionDataService` at the organization scope and refreshed through Azure Analytics.
+- If the count cache cannot be read, tags remain manageable with unknown counts and an explicit error. Use **Refresh counts** to retry; automatic refresh is skipped for a failed cache read.
 - Tag changes use the Azure DevOps Tags API; work-item updates use Work Item Tracking APIs.
 
 ## Packaging the Extension

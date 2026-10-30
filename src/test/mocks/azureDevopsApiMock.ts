@@ -9,7 +9,7 @@ export const mockWorkItemTrackingClient = {
   queryByWiql: jest.fn<Promise<{ workItems: Array<{ id: number }> }>, [unknown, string?]>(
     async () => ({ workItems: [] })
   ),
-  getWorkItemsBatch: jest.fn<Promise<Array<{ id: number; fields?: Record<string, unknown> }>>, [unknown, string?]>(
+  getWorkItemsBatch: jest.fn<Promise<Array<{ id: number; rev?: number; fields?: Record<string, unknown> }>>, [unknown, string?]>(
     async () => []
   ),
   updateWorkItem: jest.fn<Promise<Record<string, never>>, [unknown, number, string?]>(
