@@ -209,7 +209,7 @@ export class TagService {
           await client.updateWorkItem(
             [
               { op: "test", path: "/rev", value: item.rev },
-              { op: "add", path: "/fields/System.Tags", value: joinTags([...new Set(updated)]) },
+              { op: "replace", path: "/fields/System.Tags", value: joinTags([...new Set(updated)]) },
             ],
             id,
             project
