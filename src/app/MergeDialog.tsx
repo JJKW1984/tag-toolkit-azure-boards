@@ -33,8 +33,8 @@ const optionId = (index: number) => `tm-merge-target-option-${index}`;
 // "other" tags to talk about.
 const chooseKeptTagWarning = (selectedCount: number): string =>
   selectedCount === 1
-    ? "Choose the tag to keep. The selected tag is deleted, and work items that use it are re-tagged with the tag you keep."
-    : "Choose the tag to keep: click one of the tags below, or name a different one. Every other selected tag is deleted, and work items that use them are re-tagged with the tag you keep.";
+    ? "Choose the tag to keep. On matching work items, the selected tag is replaced with the tag you keep."
+    : "Choose the tag to keep: click one of the tags below, or name a different one. On matching work items, every other selected tag is replaced with the tag you keep.";
 
 export const MergeDialog: React.FC<MergeDialogProps> = ({
   sources,
@@ -109,12 +109,6 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
   const canCreate = isNewTag && !targetError;
   const totalItems = suggestions.length + (canCreate ? 1 : 0);
 
-  const these = remainingSourceCount === 1 ? "it" : "them";
-  const retagged = (
-    <>
-      work items that use {these} are re-tagged with “{trimmed}”.
-    </>
-  );
   let warning: React.ReactNode;
   if (trimmed.length === 0 || targetError) {
     // An invalid name must not read as "“x” will be created"; the field's own error names the problem.
@@ -129,20 +123,19 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
   } else if (targetIsSource) {
     warning = (
       <>
-        “{trimmed}” is kept. The other{" "}
-        {remainingSourceCount === 1 ? "tag is" : `${remainingSourceCount} tags are`} deleted, and{" "}
-        {retagged}
+        “{trimmed}” is kept. On matching work items, the other{" "}
+        {remainingSourceCount === 1 ? "tag is" : `${remainingSourceCount} tags are`} replaced with “{trimmed}”.
       </>
     );
   } else {
     warning = (
       <>
-        The {remainingSourceCount === 1 ? "selected tag is" : `${remainingSourceCount} selected tags are`}{" "}
-        deleted, and {retagged}
+        On matching work items, the {remainingSourceCount === 1 ? "selected tag is" : `${remainingSourceCount} selected tags are`}{" "}
+        replaced with “{trimmed}”.
         {isNewTag && (
           <>
             {" "}
-            “{trimmed}” will be created.
+            “{trimmed}” will be created when a work item needs it.
           </>
         )}
       </>
@@ -230,6 +223,7 @@ export const MergeDialog: React.FC<MergeDialogProps> = ({
         <MessageCard severity={MessageCardSeverity.Warning}>
           <span data-testid="merge-warning" className="tm-wrap-anywhere">
             {warning}
+            {" "}Source tags remain in the project catalog. Items tagged after the merge starts may need another merge.
           </span>
         </MessageCard>
       <div

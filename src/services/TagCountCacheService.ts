@@ -74,6 +74,10 @@ export class TagCountCacheService {
   async getCache(): Promise<TagCountCache | null> {
     const manager = await this.getDataManager();
     const value = await manager.getValue<TagCountCache>(CACHE_KEY, { scopeType: "Default" });
+    if (value && Object.values(value.counts).some((count) => typeof count !== "number" || !Number.isFinite(count) || count < 0)) {
+      log.warn("Invalid tag count cache detected; counts will be refreshed.");
+      return null;
+    }
     return value ?? null;
   }
 
@@ -121,7 +125,7 @@ export class TagCountCacheService {
     orgName: string,
     tally: RunTally
   ): Promise<Record<string, number>> {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, number> = Object.create(null);
     let url: string | null =
       `${ANALYTICS_WORK_ITEMS(orgName)}` +
       `?$apply=filter(TagNames ne null)/groupby((TagNames),aggregate($count as Count))`;
@@ -144,7 +148,7 @@ export class TagCountCacheService {
     orgName: string,
     tally: RunTally
   ): Promise<Record<string, number>> {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, number> = Object.create(null);
     let url: string | null =
       `${ANALYTICS_WORK_ITEMS(orgName)}` +
       `?$select=WorkItemId&$expand=Tags($select=TagName)&$filter=Tags/any()`;

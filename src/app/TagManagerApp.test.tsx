@@ -71,6 +71,42 @@ describe("TagManagerApp", () => {
     expect(screen.queryByRole("button", { name: /^Count/ })).toBeNull();
   });
 
+  it.each(["stored cache", "refreshed cache"])("does not read inherited counts from a %s", async (source) => {
+    mockTagService.getAllTags.mockResolvedValue([
+      { id: "1", name: "constructor", url: "u" },
+      { id: "2", name: "__proto__", url: "u" },
+    ]);
+    const cache = { counts: {}, lastUpdated: new Date().toISOString() };
+    if (source === "stored cache") mockTagCountCacheService.getCache.mockResolvedValue(cache);
+    else mockTagCountCacheService.refreshCache.mockResolvedValue(cache);
+
+    render(<TagManagerApp />);
+    await screen.findByText("constructor");
+    if (source === "refreshed cache") {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh counts" }));
+    }
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("tag-count").map((cell) => cell.textContent)).toEqual(["0", "0"]);
+    });
+  });
+
+  it("renders own prototype-property counts from a persisted JSON cache", async () => {
+    mockTagService.getAllTags.mockResolvedValue([
+      { id: "1", name: "constructor", url: "u" },
+      { id: "2", name: "__proto__", url: "u" },
+    ]);
+    mockTagCountCacheService.getCache.mockResolvedValue({
+      counts: JSON.parse('{"constructor":3,"__proto__":2}'),
+      lastUpdated: new Date().toISOString(),
+    });
+
+    render(<TagManagerApp />);
+    await screen.findByText("constructor");
+
+    expect(screen.getAllByTestId("tag-count").map((cell) => cell.textContent)).toEqual(["2", "3"]);
+  });
+
   it("renders Merge before Delete in the command bar", async () => {
     mockTagService.getAllTags.mockResolvedValue([]);
 
@@ -132,6 +168,49 @@ describe("TagManagerApp", () => {
     });
   });
 
+  it("keeps tags usable with unknown counts when reading the optional cache fails", async () => {
+    mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "alpha", url: "u" }]);
+    mockTagCountCacheService.getCache.mockRejectedValue(new Error("storage unavailable"));
+
+    render(<TagManagerApp />);
+
+    expect(await screen.findByText("alpha")).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't load tag counts.*storage unavailable/)).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load tags")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Count not loaded")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select alpha" }));
+    expect(screen.getByRole("button", { name: "Merge (1)" })).toBeEnabled();
+    expect(mockTagCountCacheService.shouldAutoRefresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps new tag results and selection when a silent reload cannot read the cache", async () => {
+    const alpha = { id: "1", name: "alpha", url: "u" };
+    const beta = { id: "2", name: "beta", url: "u" };
+    mockTagService.getAllTags.mockResolvedValueOnce([alpha, beta]).mockResolvedValueOnce([
+      alpha, beta, { id: "3", name: "gamma", url: "u" },
+    ]);
+    mockTagCountCacheService.getCache
+      .mockResolvedValueOnce({ counts: { alpha: 4, beta: 2 }, lastUpdated: new Date().toISOString() })
+      .mockRejectedValueOnce(new Error("storage unavailable"));
+    mockTagService.mergeTags.mockResolvedValue({
+      succeeded: [{ source: beta, affectedCount: 1, workItemIds: [1] }],
+      failed: [],
+    });
+
+    render(<TagManagerApp />);
+    await screen.findByText("beta");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select beta" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Merge/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Tag to keep" }), { target: { value: "alpha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+
+    expect(await screen.findByText("gamma")).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't load tag counts.*storage unavailable/)).toBeInTheDocument();
+    expect(screen.queryByText(/Last updated:/)).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText("Count not loaded")).toHaveLength(3);
+    expect(screen.getByRole("checkbox", { name: "Select beta" })).not.toBeChecked();
+  });
+
   describe("when the tags fail to load", () => {
     it("says so, rather than that the project has no tags, and offers to try again", async () => {
       mockTagService.getAllTags.mockRejectedValueOnce(new Error("boom"));
@@ -167,7 +246,7 @@ describe("TagManagerApp", () => {
         ])
         .mockRejectedValueOnce(new Error("reload down"));
       mockTagService.mergeTags.mockResolvedValue({
-        succeeded: [{ source: { id: "2", name: "two", url: "u" }, affectedCount: 1 }],
+        succeeded: [{ source: { id: "2", name: "two", url: "u" }, affectedCount: 1, workItemIds: [1] }],
         failed: [],
       });
 

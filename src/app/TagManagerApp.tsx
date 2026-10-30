@@ -47,6 +47,11 @@ function formatDuration(ms: number): string {
 
 const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
+function countForTag(counts: Record<string, number>, tagName: string): number {
+  const key = tagName.toLowerCase();
+  return Object.prototype.hasOwnProperty.call(counts, key) ? counts[key] : 0;
+}
+
 /** One-line summary of the last refresh plus a fuller tooltip, for diagnosing slow or fallback runs. */
 function describeRefresh(stats: RefreshStats): { summary: string; detail: string } {
   const strategy = stats.strategy === "aggregate" ? "Aggregate" : "Crawl (fallback)";
@@ -148,7 +153,7 @@ export const TagManagerApp: React.FC = () => {
       const orgName = SDK.getHost().name;
       const cache = await tagCountCacheService.refreshCache(orgName);
       setTags((prev) =>
-        prev.map((t) => ({ ...t, count: cache.counts[t.name.toLowerCase()] ?? 0 }))
+        prev.map((t) => ({ ...t, count: countForTag(cache.counts, t.name) }))
       );
       setLastUpdated(cache.lastUpdated);
       setLastStats(cache.stats ?? null);
@@ -187,18 +192,23 @@ export const TagManagerApp: React.FC = () => {
       setLoadError(null);
     }
     try {
-      const [result, cache] = await Promise.all([
+      const [result, cacheResult] = await Promise.all([
         tagService.getAllTags(),
-        tagCountCacheService.getCache(),
+        tagCountCacheService.getCache().then(
+          (value) => ({ status: "fulfilled" as const, value }),
+          (reason: unknown) => ({ status: "rejected" as const, reason })
+        ),
       ]);
+      const cache = cacheResult.status === "fulfilled" ? cacheResult.value : null;
+      if (cacheResult.status === "rejected") {
+        setError(`Couldn't load tag counts: ${sanitizeError(cacheResult.reason)}. Tag management is still available; select Refresh counts to retry.`);
+      }
       const tagsWithCounts = cache
-        ? result.map((t) => ({ ...t, count: cache.counts[t.name.toLowerCase()] ?? 0 }))
+        ? result.map((t) => ({ ...t, count: countForTag(cache.counts, t.name) }))
         : result;
       setTags(tagsWithCounts);
-      if (cache) {
-        setLastUpdated(cache.lastUpdated);
-        setLastStats(cache.stats ?? null);
-      }
+      setLastUpdated(cache?.lastUpdated ?? null);
+      setLastStats(cache?.stats ?? null);
       // A silent reload leaves the user working, so keep what they selected and drop only what is gone.
       setSelectedIds((prev) => {
         if (!options?.silent) return new Set();
@@ -206,12 +216,14 @@ export const TagManagerApp: React.FC = () => {
         return new Set([...prev].filter((id) => present.has(id)));
       });
       // Not awaited: the cooldown lookup is one more storage read the table need not wait on.
-      void tagCountCacheService
-        .shouldAutoRefresh(cache)
-        .then((refresh) => {
-          if (refresh) void triggerBackgroundRefresh();
-        })
-        .catch((e) => setError(sanitizeError(e)));
+      if (cacheResult.status === "fulfilled") {
+        void tagCountCacheService
+          .shouldAutoRefresh(cache)
+          .then((refresh) => {
+            if (refresh) void triggerBackgroundRefresh();
+          })
+          .catch((e) => setError(sanitizeError(e)));
+      }
     } catch (e) {
       // A reload behind a table the user is working in keeps that table and reports in the banner.
       if (options?.silent) setError(sanitizeError(e));
@@ -314,16 +326,15 @@ export const TagManagerApp: React.FC = () => {
     try {
       const { succeeded, failed } = await tagService.mergeTags(sources, targetName);
 
-      // Remove fully-merged sources from the table immediately.
-      const removedIds = new Set(succeeded.map((s) => s.source.id));
-      setTags((prev) => prev.filter((t) => !removedIds.has(t.id)));
-
       if (succeeded.length > 0) {
-        // affectedCount only covers items that gained the target; items that already had it also lose the source.
-        const added = succeeded.reduce((sum, s) => sum + s.affectedCount, 0);
-        const addedNote = added > 0 ? ` Added “${targetName}” to ${plural(added, "work item")}.` : "";
+        const updatedIds = new Set<number>();
+        for (const entry of succeeded) {
+          for (const id of entry.workItemIds) updatedIds.add(id);
+        }
+        const updated = updatedIds.size;
+        const updatedNote = updated > 0 ? ` Updated ${plural(updated, "work item")}.` : "";
         setToast({
-          message: `Merged ${plural(succeeded.length, "tag")} into “${targetName}”.${addedNote} Refresh counts to update the numbers.`,
+          message: `Merged ${plural(succeeded.length, "tag")} into “${targetName}”.${updatedNote} Source tags remain in the project catalog. Refresh counts to update the numbers.`,
         });
       }
 
@@ -343,7 +354,7 @@ export const TagManagerApp: React.FC = () => {
       if (failed.length > 0) {
         const reasons = failed.map((f) => `${f.source.name} (${f.error})`).join("; ");
         setError(
-          `Couldn't merge ${plural(failed.length, "tag")} into “${targetName}”: ${reasons}. They're still selected so you can try again.`
+          `Couldn't merge ${plural(failed.length, "tag")} into “${targetName}”: ${reasons}. Some work items may already have been updated. They're still selected so you can try again.`
         );
       }
     } catch (e) {
