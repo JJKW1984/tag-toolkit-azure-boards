@@ -162,7 +162,8 @@ export class TagService {
     if (failed.length > 0) {
       throw new Error(failed[0].error);
     }
-    const { affectedCount, workItemIds } = succeeded[0];
+    // mergeTags skips a source whose name matches the target (case-insensitively), leaving nothing succeeded.
+    const { affectedCount, workItemIds } = succeeded[0] ?? { affectedCount: 0, workItemIds: [] };
     return { affectedCount, workItemIds };
   }
 

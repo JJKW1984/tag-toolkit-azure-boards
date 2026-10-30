@@ -92,6 +92,14 @@ describe("TagService", () => {
     expect(ids).toEqual([100, 101]);
   });
 
+  it("treats a same-name merge as a no-op instead of throwing", async () => {
+    const service = new TagService();
+    const result = await service.mergeTag("old-id", "Old", "old");
+
+    expect(result).toEqual({ affectedCount: 0, workItemIds: [] });
+    expect(mockWorkItemTrackingClient.updateWorkItem).not.toHaveBeenCalled();
+  });
+
   it("replaces the source per work item without deleting the project tag", async () => {
     mockWorkItemTrackingClient.queryByWiql.mockResolvedValue({
       workItems: [{ id: 10 }, { id: 11 }],
