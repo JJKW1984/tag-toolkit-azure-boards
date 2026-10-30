@@ -75,6 +75,7 @@ export const TagManagerApp: React.FC = () => {
   const [tags, setTags] = useState<TagItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [countCacheError, setCountCacheError] = useState<string | null>(null);
   // Why the first load failed. Shown where the list would be: an empty table there would say the project has no tags.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -157,6 +158,7 @@ export const TagManagerApp: React.FC = () => {
       );
       setLastUpdated(cache.lastUpdated);
       setLastStats(cache.stats ?? null);
+      setCountCacheError(null);
     } catch (e) {
       setError(sanitizeError(e));
     } finally {
@@ -189,6 +191,7 @@ export const TagManagerApp: React.FC = () => {
     if (!options?.silent) {
       setLoading(true);
       setError(null);
+      setCountCacheError(null);
       setLoadError(null);
     }
     try {
@@ -201,7 +204,7 @@ export const TagManagerApp: React.FC = () => {
       ]);
       const cache = cacheResult.status === "fulfilled" ? cacheResult.value : null;
       if (cacheResult.status === "rejected") {
-        setError(`Couldn't load tag counts: ${sanitizeError(cacheResult.reason)}. Tag management is still available; select Refresh counts to retry.`);
+        setCountCacheError(`Couldn't load tag counts: ${sanitizeError(cacheResult.reason)}. Tag management is still available; select Refresh counts to retry.`);
       }
       const tagsWithCounts = cache
         ? result.map((t) => ({ ...t, count: countForTag(cache.counts, t.name) }))
@@ -421,6 +424,14 @@ export const TagManagerApp: React.FC = () => {
             onDismiss={() => setError(null)}
           >
             {error}
+          </MessageCard>
+        )}
+        {countCacheError && (
+          <MessageCard
+            severity={MessageCardSeverity.Error}
+            onDismiss={() => setCountCacheError(null)}
+          >
+            {countCacheError}
           </MessageCard>
         )}
         <Card>

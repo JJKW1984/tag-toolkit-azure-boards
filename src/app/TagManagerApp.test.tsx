@@ -183,6 +183,27 @@ describe("TagManagerApp", () => {
     expect(mockTagCountCacheService.shouldAutoRefresh).not.toHaveBeenCalled();
   });
 
+  it("clears a cache-read error after refreshing counts without hiding a delete error", async () => {
+    mockTagService.getAllTags.mockResolvedValue([{ id: "1", name: "alpha", url: "u" }]);
+    mockTagCountCacheService.getCache.mockRejectedValue(new Error("storage unavailable"));
+    mockTagService.deleteTagById.mockRejectedValue(new Error("delete failed"));
+
+    render(<TagManagerApp />);
+
+    await screen.findByText("alpha");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select alpha" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete 1 tag" }));
+    expect(await screen.findByText(/Couldn't delete 1 tag/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh counts" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Couldn't load tag counts/)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/Couldn't delete 1 tag/)).toBeInTheDocument();
+  });
+
   it("keeps new tag results and selection when a silent reload cannot read the cache", async () => {
     const alpha = { id: "1", name: "alpha", url: "u" };
     const beta = { id: "2", name: "beta", url: "u" };
