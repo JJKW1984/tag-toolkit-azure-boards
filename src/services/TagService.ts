@@ -6,6 +6,7 @@ import { CommonServiceIds, IProjectPageService } from "azure-devops-extension-ap
 import { WorkItem, WorkItemBatchGetRequest } from "azure-devops-extension-api/WorkItemTracking";
 import { sanitizeError } from "../utils/sanitizeError";
 import { joinTags, parseTags } from "../utils/tagString";
+import { HistoryWriteError, MergeEvidence } from "../types/runHistory";
 import {
   TagItem,
   TagOperationResult,
@@ -115,6 +116,34 @@ export class TagService {
     return (result.workItems ?? []).map((wi) => wi.id);
   }
 
+  async readWorkItemTags(
+    ids: number[], onBatch?: (snapshot: Map<number, string[]>) => Promise<void>
+  ): Promise<Map<number, string[]>> {
+    const project = await this.getProject();
+    const client = getClient(WorkItemTrackingRestClient);
+    const result = new Map<number, string[]>();
+    for (let offset = 0; offset < ids.length; offset += 200) {
+      const batch = ids.slice(offset, offset + 200);
+      const items = await client.getWorkItemsBatch(
+        { ids: batch, fields: ["System.Tags"] } as WorkItemBatchGetRequest, project
+      );
+      const captured = new Map<number, string[]>();
+      for (const id of batch) {
+        const item = items.find((entry) => entry.id === id);
+        if (!item?.fields) throw new Error(`Couldn't capture tags for work item ${id}`);
+        const value: unknown = item.fields["System.Tags"];
+        if (value !== undefined && typeof value !== "string") {
+          throw new Error(`Invalid tags returned for work item ${id}`);
+        }
+        const tags = parseTags(value ?? "");
+        result.set(id, tags);
+        captured.set(id, tags);
+      }
+      await onBatch?.(captured);
+    }
+    return result;
+  }
+
   /**
    * Replaces source tags with targetName on the work items found for each source.
    * Each item is revision-checked; the project tag catalog is never deleted from,
@@ -123,7 +152,8 @@ export class TagService {
    */
   async mergeTags(
     sources: TagItem[],
-    targetName: string
+    targetName: string,
+    observe?: (source: string, event: MergeEvidence) => Promise<void>
   ): Promise<BatchMergeResult> {
     const succeeded: MergeSourceResult[] = [];
     const failed: MergeSourceFailure[] = [];
@@ -132,16 +162,19 @@ export class TagService {
       if (source.name.toLowerCase() === targetName.toLowerCase()) continue;
       try {
         const ids = await this.getWorkItemsWithTag(source.name);
+        await observe?.(source.name, { kind: "discovered", ids });
         const result = await this.applyTagUpdate(ids, (tags) => {
           if (!tags.some((tag) => tag.toLowerCase() === source.name.toLowerCase())) return tags;
           const remaining = tags.filter((tag) => tag.toLowerCase() !== source.name.toLowerCase());
           return remaining.some((tag) => tag.toLowerCase() === targetName.toLowerCase())
             ? remaining
             : [...remaining, targetName];
-        });
+        }, observe ? (event) => observe(source.name, event) : undefined);
         succeeded.push({ source, ...result });
       } catch (e) {
+        if (e instanceof HistoryWriteError) throw e;
         failed.push({ source, error: sanitizeError(e) });
+        await observe?.(source.name, { kind: "source failed", error: sanitizeError(e) });
       }
     }
 
@@ -172,7 +205,8 @@ export class TagService {
    */
   private async applyTagUpdate(
     workItemIds: number[],
-    transform: (tags: string[]) => string[]
+    transform: (tags: string[]) => string[],
+    observe?: (event: MergeEvidence) => Promise<void>
   ): Promise<TagOperationResult> {
     if (workItemIds.length === 0) return { affectedCount: 0, workItemIds: [] };
 
@@ -203,8 +237,18 @@ export class TagService {
         const updated = transform(original);
         const normalizedOriginal = [...new Set(original)].sort().join(";");
         const normalizedUpdated = [...new Set(updated)].sort().join(";");
-        if (normalizedOriginal === normalizedUpdated) break;
+        if (normalizedOriginal === normalizedUpdated) {
+          await observe?.({ kind: "card", id, change: {
+            attempt: retries, before: original, after: original, outcome: "unchanged",
+            verification: retries > 0 ? "observed" : "confirmed",
+          } });
+          break;
+        }
 
+        await observe?.({ kind: "card", id, change: {
+          attempt: retries, before: original, after: null, intendedAfter: updated,
+          outcome: "unknown", verification: "unverified",
+        } });
         try {
           await client.updateWorkItem(
             [
@@ -214,9 +258,12 @@ export class TagService {
             id,
             project
           );
-          affectedIds.push(id);
-          break;
         } catch (e) {
+          await observe?.({ kind: "card", id, change: {
+            attempt: retries, before: original, after: null, intendedAfter: updated,
+            outcome: "unknown", verification: "unverified",
+            error: `${sanitizeError(e)}. The update may have committed without a response.`,
+          } });
           if (retries >= 3) throw e;
           const current = await client.getWorkItemsBatch(
             { ids: [id], fields: ["System.Tags"] } as WorkItemBatchGetRequest,
@@ -224,9 +271,21 @@ export class TagService {
           );
           const latest = current.find((wi) => wi.id === id);
           // A changed revision confirms a concurrent edit without depending on localized API errors.
-          if (!latest || latest.rev === item.rev) throw e;
+          if (!latest || latest.rev === item.rev) {
+            await observe?.({ kind: "card", id, change: {
+              attempt: retries, before: original, after: null, intendedAfter: updated,
+              outcome: latest ? "failed" : "unknown", verification: "unverified", error: sanitizeError(e),
+            } });
+            throw e;
+          }
           item = latest;
+          continue;
         }
+        affectedIds.push(id);
+        await observe?.({ kind: "card", id, change: {
+          attempt: retries, before: original, after: [...new Set(updated)], outcome: "changed", verification: "confirmed",
+        } });
+        break;
       }
     }
 

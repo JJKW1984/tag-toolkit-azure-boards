@@ -23,9 +23,12 @@ import "./tag-manager.css";
 import { SearchBar } from "./SearchBar";
 import { sanitizeError } from "../utils/sanitizeError";
 import { SortState, sortTags } from "../utils/sortTags";
+import { TagEditService } from "../services/TagEditService";
+import { RunReport } from "../types/runHistory";
+import { RunHistory } from "./RunHistory";
 
 /** Work in flight behind an open dialog; `done`/`total` are set when progress is countable. */
-type BusyState = { kind: "delete" | "merge"; done?: number; total?: number } | null;
+type BusyState = { kind: "delete" | "merge" | "rename"; done?: number; total?: number } | null;
 
 /** `countsUpdatedAt` is snapshotted with the tags so a later refresh can't relabel their counts as fresh. */
 type DialogState =
@@ -34,6 +37,7 @@ type DialogState =
   | null;
 
 const tagService = new TagService();
+const tagEditService = new TagEditService(tagService);
 const tagCountCacheService = new TagCountCacheService();
 const PAGE_SIZE = 25;
 const TOAST_DURATION_MS = 8000;
@@ -89,8 +93,10 @@ export const TagManagerApp: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [busy, setBusy] = useState<BusyState>(null);
   const [toast, setToast] = useState<{ message: string } | null>(null);
+  const [latestRun, setLatestRun] = useState<RunReport | null>(null);
   const toastRef = useRef<Toast>(null);
   const tagsRef = useRef<TagItem[]>([]);
+  const activeEdit = useRef(false);
 
   useEffect(() => {
     tagsRef.current = tags;
@@ -127,9 +133,13 @@ export const TagManagerApp: React.FC = () => {
   // --- Helpers ---
 
   const handleRename = useCallback(async (tagId: string, newName: string) => {
+    if (activeEdit.current) throw new Error("Another tag edit is still running.");
+    activeEdit.current = true;
+    setBusy({ kind: "rename" });
     const before = tagsRef.current.find((t) => t.id === tagId);
     try {
-      const updated = await tagService.renameTagById(tagId, newName);
+      if (!before) throw new Error("The tag is no longer available. Reload before renaming.");
+      const updated = await tagEditService.rename(before, newName, setLatestRun);
       setTags((prev) =>
         prev
           .map((t) => (t.id === tagId ? { ...t, name: updated.name } : t))
@@ -145,6 +155,9 @@ export const TagManagerApp: React.FC = () => {
       // Rejected, not shown in the page banner: the editor stays open with the draft and puts this beside
       // the field, and saying it in both places would be saying it twice.
       throw new Error(sanitizeError(e));
+    } finally {
+      activeEdit.current = false;
+      setBusy(null);
     }
   }, []);
 
@@ -289,14 +302,15 @@ export const TagManagerApp: React.FC = () => {
   // --- Background jobs ---
 
   const runDeleteJobs = async (tagsToDelete: TagItem[]) => {
+    if (activeEdit.current) { setError("Another tag edit is still running."); return; }
+    activeEdit.current = true;
     const total = tagsToDelete.length;
     const failures: { tag: TagItem; error: string }[] = [];
     let deleted = 0;
     setBusy({ kind: "delete", done: 0, total });
     try {
-      for (const tag of tagsToDelete) {
-        try {
-          await tagService.deleteTagById(tag.id);
+      const result = await tagEditService.delete(tagsToDelete, setLatestRun,
+        (tag) => {
           deleted++;
           setTags((prev) => prev.filter((t) => t.id !== tag.id));
           setSelectedIds((prev) => {
@@ -304,12 +318,14 @@ export const TagManagerApp: React.FC = () => {
             next.delete(tag.id);
             return next;
           });
-        } catch (e) {
-          failures.push({ tag, error: sanitizeError(e) });
-        }
-        setBusy({ kind: "delete", done: deleted + failures.length, total });
-      }
+        },
+        (done) => setBusy({ kind: "delete", done, total })
+      );
+      failures.push(...result.failed);
+    } catch (e) {
+      setError(sanitizeError(e));
     } finally {
+      activeEdit.current = false;
       setBusy(null);
       setDialog(null);
     }
@@ -324,10 +340,12 @@ export const TagManagerApp: React.FC = () => {
   };
 
   const runMergeJobs = async (selectedSources: TagItem[], targetName: string) => {
+    if (activeEdit.current) { setError("Another tag edit is still running."); return; }
+    activeEdit.current = true;
     const sources = selectedSources.filter((s) => s.name.toLowerCase() !== targetName.toLowerCase());
     setBusy({ kind: "merge" });
     try {
-      const { succeeded, failed } = await tagService.mergeTags(sources, targetName);
+      const { succeeded, failed } = await tagEditService.merge(sources, targetName, setLatestRun);
 
       if (succeeded.length > 0) {
         const updatedIds = new Set<number>();
@@ -364,6 +382,8 @@ export const TagManagerApp: React.FC = () => {
       setBusy(null);
       setDialog(null);
       setError(sanitizeError(e));
+    } finally {
+      activeEdit.current = false;
     }
   };
 
@@ -395,7 +415,7 @@ export const TagManagerApp: React.FC = () => {
       id: "merge",
       text: `Merge${sel}`,
       iconProps: { iconName: "BranchMerge" },
-      disabled: n === 0,
+      disabled: n === 0 || busy !== null,
       onActivate: handleMergeClick,
       important: true,
     },
@@ -403,7 +423,7 @@ export const TagManagerApp: React.FC = () => {
       id: "delete",
       text: `Delete${sel}`,
       iconProps: { iconName: "Delete" },
-      disabled: n === 0,
+      disabled: n === 0 || busy !== null,
       onActivate: handleDeleteClick,
       important: true,
     },
@@ -418,6 +438,7 @@ export const TagManagerApp: React.FC = () => {
         commandBarItems={commandBarItems}
       />
       <div className="page-content" data-testid="tag-manager">
+        <RunHistory latest={latestRun} />
         {error && (
           <MessageCard
             severity={MessageCardSeverity.Error}

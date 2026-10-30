@@ -4,12 +4,17 @@ export const CommonServiceIds = {
 };
 
 export interface IProjectPageService {
-  getProject(): Promise<{ name: string } | null>;
+  getProject(): Promise<{ id: string; name: string } | null>;
 }
 
 export interface IExtensionDataManager {
   getValue<T>(key: string, documentId?: string): Promise<T>;
   setValue<T>(key: string, value: T, documentId?: string): Promise<T>;
+  createDocument(collection: string, doc: unknown): Promise<unknown>;
+  updateDocument(collection: string, doc: unknown): Promise<unknown>;
+  getDocument(collection: string, id: string): Promise<unknown>;
+  getDocuments(collection: string): Promise<unknown[]>;
+  deleteDocument(collection: string, id: string): Promise<void>;
 }
 
 export interface IExtensionDataService {

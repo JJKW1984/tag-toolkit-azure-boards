@@ -1,4 +1,4 @@
-import { expect, openHub, rowFor, searchFor, test } from "../fixtures";
+import { expect, openHub, rowFor, searchFor, test, verifyRunReport } from "../fixtures";
 
 test("deletes a selected tag after confirming the dialog", async ({ page, seed }) => {
   await openHub(page);
@@ -16,6 +16,7 @@ test("deletes a selected tag after confirming the dialog", async ({ page, seed }
 
   await expect(dialog).toBeHidden({ timeout: 60_000 });
   await expect(rowFor(page, seed.del)).toHaveCount(0);
+  await verifyRunReport(page, "delete");
 });
 
 test("cancelling the delete dialog keeps the tag", async ({ page, seed }) => {

@@ -51,6 +51,35 @@ export function rowFor(page: Page, tagName: string): Locator {
   return page.locator(`[data-testid="tag-row"][data-tag-name="${tagName}"]`);
 }
 
+export async function verifyRunReport(page: Page, action: "merge" | "rename" | "delete"): Promise<void> {
+  await page.getByRole("button", { name: "View latest run" }).click();
+  const report = page.getByRole("region", { name: "Run report" });
+  await expect(report).toBeVisible();
+  await expect(report).toContainText("completed");
+  await expect(report).toContainText(action === "merge" ? "confirmed" : "observed");
+  await expect(report.getByRole("link")).toHaveCount(2);
+  const heading = await report.getByRole("heading", { level: 3 }).innerText();
+  const runId = heading.match(/run ([a-f0-9]{32})$/)?.[1];
+  if (!runId) throw new Error("Report did not expose a run ID");
+  const downloadPromise = page.waitForEvent("download");
+  await report.getByRole("button", { name: "Export run to CSV" }).click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  if (!stream) throw new Error("Run CSV was not readable");
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const csv = Buffer.concat(chunks).toString("utf8");
+  expect(csv).toContain(runId);
+  expect(csv).toContain('"Card ID"');
+  expect(csv).toContain(action === "merge" ? "confirmed" : "observed");
+  if (action === "delete") expect(csv).toContain("Pull-request effects are not enumerated.");
+  await openHub(page);
+  await page.getByRole("button", { name: "Run history", exact: true }).click();
+  await page.getByRole("button", { name: new RegExp(`Open ${action} run .*${runId}`) }).click();
+  await expect(page.getByRole("region", { name: "Run report" })).toContainText(runId);
+  await expect(page.getByRole("region", { name: "Run report" }).getByRole("link")).toHaveCount(2);
+}
+
 export async function rowNames(page: Page): Promise<string[]> {
   return page
     .locator('[data-testid="tag-row"]')

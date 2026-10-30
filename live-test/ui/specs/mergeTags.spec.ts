@@ -1,4 +1,4 @@
-import { expect, openHub, rowFor, searchFor, test } from "../fixtures";
+import { expect, openHub, rowFor, searchFor, test, verifyRunReport } from "../fixtures";
 import { testTag } from "../../naming";
 
 test("merges two selected tags into a target tag", async ({ page, seed }) => {
@@ -30,6 +30,7 @@ test("merges two selected tags into a target tag", async ({ page, seed }) => {
   for (const source of seed.merge.sources) {
     await expect(rowFor(page, source)).toBeVisible();
   }
+  await verifyRunReport(page, "merge");
 });
 
 test("cancelling the merge dialog changes nothing", async ({ page, seed }) => {

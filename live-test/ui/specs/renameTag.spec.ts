@@ -1,4 +1,4 @@
-import { expect, openHub, rowFor, searchFor, test } from "../fixtures";
+import { expect, openHub, rowFor, searchFor, test, verifyRunReport } from "../fixtures";
 import { testTag } from "../../naming";
 
 test("renames a tag inline and shows the new name in the table", async ({ page, seed }) => {
@@ -19,6 +19,7 @@ test("renames a tag inline and shows the new name in the table", async ({ page, 
   // The table re-sorts and re-renders from the service response.
   await expect(rowFor(page, seed.rename.new)).toBeVisible({ timeout: 30_000 });
   await expect(rowFor(page, seed.rename.old)).toHaveCount(0);
+  await verifyRunReport(page, "rename");
 });
 
 test("abandons a rename when the edit is cancelled", async ({ page, seed }) => {

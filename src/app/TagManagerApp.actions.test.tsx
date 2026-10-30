@@ -2,6 +2,8 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const mockTagService = {
+  getWorkItemsWithTag: jest.fn(),
+  readWorkItemTags: jest.fn(),
   getAllTags: jest.fn(),
   deleteTagById: jest.fn(),
   renameTagById: jest.fn(),
@@ -48,6 +50,8 @@ async function renderAndSelect(names: string[]) {
 describe("TagManagerApp — delete feedback", () => {
   beforeEach(() => {
     Object.values(mockTagService).forEach((fn) => fn.mockReset());
+    mockTagService.getWorkItemsWithTag.mockResolvedValue([]);
+    mockTagService.readWorkItemTags.mockResolvedValue(new Map());
     Object.values(mockTagCountCacheService).forEach((fn) => fn.mockReset());
     mockTagCountCacheService.getCache.mockResolvedValue(null);
     mockTagCountCacheService.shouldAutoRefresh.mockResolvedValue(false);

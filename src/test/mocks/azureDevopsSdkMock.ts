@@ -1,8 +1,8 @@
-type ProjectInfo = { name: string } | null;
+type ProjectInfo = { id: string; name: string } | null;
 
 type WorkItemContributionHandler = Record<string, (...args: unknown[]) => unknown>;
 
-let projectInfo: ProjectInfo = { name: "Demo Project" };
+let projectInfo: ProjectInfo = { id: "demo-project-id", name: "Demo Project" };
 const registeredHandlers: WorkItemContributionHandler[] = [];
 
 export const mockInit = jest.fn().mockResolvedValue(undefined);
@@ -20,7 +20,47 @@ export const mockProjectPageService = {
 export const mockExtensionDataManager = {
   getValue: jest.fn().mockResolvedValue(undefined),
   setValue: jest.fn().mockResolvedValue(undefined),
+  createDocument: jest.fn(),
+  updateDocument: jest.fn(),
+  getDocument: jest.fn(),
+  getDocuments: jest.fn(),
+  deleteDocument: jest.fn(),
 };
+
+const documents = new Map<string, Record<string, unknown>>();
+
+function resetDocuments(): void {
+  documents.clear();
+  const key = (collection: string, id: string) => `${collection}/${id}`;
+  const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+  mockExtensionDataManager.createDocument.mockReset().mockImplementation(async (collection: string, doc: Record<string, unknown>) => {
+    const id = String(doc.id);
+    if (documents.has(key(collection, id))) throw new Error("Document already exists");
+    const saved = { ...copy(doc), __etag: 1 };
+    documents.set(key(collection, id), saved);
+    return copy(saved);
+  });
+  mockExtensionDataManager.updateDocument.mockReset().mockImplementation(async (collection: string, doc: Record<string, unknown>) => {
+    const id = String(doc.id);
+    const previous = documents.get(key(collection, id));
+    if (!previous) throw new Error("Document not found");
+    if (previous.__etag !== doc.__etag) throw new Error("Document conflict");
+    const saved = { ...copy(doc), __etag: Number(doc.__etag) + 1 };
+    documents.set(key(collection, id), saved);
+    return copy(saved);
+  });
+  mockExtensionDataManager.getDocument.mockReset().mockImplementation(async (collection: string, id: string) => {
+    const doc = documents.get(key(collection, id));
+    if (!doc) throw new Error("Document not found");
+    return copy(doc);
+  });
+  mockExtensionDataManager.getDocuments.mockReset().mockImplementation(async (collection: string) =>
+    [...documents.entries()].filter(([id]) => id.startsWith(`${collection}/`)).map(([, doc]) => copy(doc))
+  );
+  mockExtensionDataManager.deleteDocument.mockReset().mockImplementation(async (collection: string, id: string) => {
+    documents.delete(key(collection, id));
+  });
+}
 
 export const mockExtensionDataService = {
   getExtensionDataManager: jest.fn(async () => mockExtensionDataManager),
@@ -41,7 +81,7 @@ export const mockRegister = jest.fn(
 );
 
 export function setMockProject(name: string | null): void {
-  projectInfo = name ? { name } : null;
+  projectInfo = name ? { id: `${name}-id`, name } : null;
 }
 
 export function triggerRegisteredEvent(eventName: string, ...args: unknown[]): void {
@@ -53,7 +93,8 @@ export function triggerRegisteredEvent(eventName: string, ...args: unknown[]): v
 }
 
 export function resetAzureDevopsSdkMock(): void {
-  projectInfo = { name: "Demo Project" };
+  projectInfo = { id: "demo-project-id", name: "Demo Project" };
+  resetDocuments();
   registeredHandlers.length = 0;
 
   mockInit.mockClear();
@@ -103,3 +144,4 @@ export const getHost = mockGetHost;
 export const getExtensionContext = mockGetExtensionContext;
 export const getService = mockGetService;
 export const register = mockRegister;
+export const getUser = () => ({ id: "user-id", displayName: "Test User", name: "tester" });

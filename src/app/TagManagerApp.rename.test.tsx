@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockTagService = {
+  getWorkItemsWithTag: jest.fn(),
+  readWorkItemTags: jest.fn(),
   getAllTags: jest.fn(),
   getProjectName: jest.fn(),
   deleteTagById: jest.fn(),
@@ -29,6 +31,8 @@ import { TagManagerApp } from "./TagManagerApp";
 beforeEach(() => {
   localStorage.clear();
   Object.values(mockTagService).forEach((fn) => (fn as jest.Mock).mockReset());
+  mockTagService.getWorkItemsWithTag.mockResolvedValue([]);
+  mockTagService.readWorkItemTags.mockResolvedValue(new Map());
   Object.values(mockTagCountCacheService).forEach((fn) => fn.mockReset());
   mockTagCountCacheService.getCache.mockResolvedValue(null);
   mockTagCountCacheService.shouldAutoRefresh.mockResolvedValue(false);

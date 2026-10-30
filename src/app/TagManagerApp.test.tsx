@@ -2,6 +2,8 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const mockTagService = {
+  getWorkItemsWithTag: jest.fn(),
+  readWorkItemTags: jest.fn(),
   getAllTags: jest.fn(),
   getProjectName: jest.fn(),
   deleteTagById: jest.fn(),
@@ -32,6 +34,8 @@ describe("TagManagerApp", () => {
   beforeEach(() => {
     localStorage.clear();
     Object.values(mockTagService).forEach((fn) => fn.mockReset());
+    mockTagService.getWorkItemsWithTag.mockResolvedValue([]);
+    mockTagService.readWorkItemTags.mockResolvedValue(new Map());
     Object.values(mockTagCountCacheService).forEach((fn) => fn.mockReset());
 
     mockTagService.getProjectName.mockResolvedValue("Demo Project");
@@ -153,7 +157,8 @@ describe("TagManagerApp", () => {
     await waitFor(() => {
       expect(mockTagService.mergeTags).toHaveBeenCalledWith(
         [{ id: "2", name: "two", url: "u" }],
-        "one"
+        "one",
+        expect.any(Function)
       );
     });
   });
